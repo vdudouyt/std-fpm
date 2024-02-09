@@ -158,7 +158,7 @@ void onconnect(struct epoll_event *evt) {
 }
 
 void onsocketread(conn_ctx_t *ctx) {
-   printf("onsocketread\n");
+   printf("onsocketread(%d)\n", ctx);
    static char buf[4096];
    int bytes_read;
    while((bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) > 0) {
@@ -178,16 +178,18 @@ void onsocketread(conn_ctx_t *ctx) {
 }
 
 void onsocketwriteok(conn_ctx_t *ctx) {
-   printf("onsocketwriteok\n");
+   printf("onsocketwriteok(%d)\n", ctx);
    if(!ctx->currentProcess) {
       printf("no fastcgi process to write\n");
       return;
    }
    while(ctx->bytes_in_buf > 0) {
-      int bytes_written = send(ctx->fd, &ctx->outBuf[ctx->write_pos], ctx->bytes_in_buf, 0);
+      int bytes_written = send(ctx->currentProcess->fd, &ctx->outBuf[ctx->write_pos], ctx->bytes_in_buf, 0);
+      printf("wrote %d bytes to fcgi process\n", bytes_written);
       if(bytes_written <= 0) break;
       ctx->write_pos += bytes_written;
       ctx->bytes_in_buf -= bytes_written;
+      if(ctx->bytes_in_buf <= 0) ctx->bytes_in_buf = 0;
    }
 }
 
@@ -206,6 +208,10 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       if(!strcmp(value, "/var/www/html/test.fcgi")) {
          printf("Starting %s...\n", value);
          fcgi_process_t *proc = fcgi_spawn(value);
+         ctx->currentProcess = proc;
+         proc->currentConn = ctx;
+         listen_ctx.ev.data.ptr = NULL;
+         assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, proc->fd, &listen_ctx.ev) == 0);
       } else {
          printf("Unknown fastcgi process: %s\n", value);
       }
