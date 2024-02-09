@@ -17,14 +17,25 @@
 
 #define BUF_SIZE 65536
 
-typedef struct {
+typedef struct conn_ctx_s conn_ctx_t;
+typedef struct fcgi_process_s fcgi_process_t;
+
+struct conn_ctx_s {
    int fd;
    fcgi_parser_t *msg_parser;
    fcgi_params_parser_t *params_parser;
 
    int bytes_in_buf, write_pos;
    char buf[65536];
-} conn_ctx_t;
+   fcgi_process_t *currentProcess;
+};
+
+struct fcgi_process_s {
+   char process_path[4096];
+   char socket_path[4096];
+   pid_t pid;
+   conn_ctx_t *currentConn;
+};
 
 conn_ctx_t *conn_ctx_new() {
    conn_ctx_t *ret = malloc(sizeof(conn_ctx_t));
@@ -122,7 +133,7 @@ void onwriteok(conn_ctx_t *ctx) {
 #define FCGI_PARAMS              4
 
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
-   printf("[main] got fcgi message: type=%d\n", hdr->type);
+   printf("[main] got fcgi message: type=%d request_id=%d\n", hdr->type, hdr->requestId);
    conn_ctx_t *ctx = userdata;
    if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->params_parser, data, hdr->contentLength);
 }
