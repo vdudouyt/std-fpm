@@ -14,30 +14,9 @@
 
 #include "fcgi_parser.h"
 #include "fcgi_params_parser.h"
+#include "main.h"
 
 #define BUF_SIZE 65536
-
-typedef struct conn_ctx_s conn_ctx_t;
-typedef struct fcgi_process_s fcgi_process_t;
-
-struct conn_ctx_s {
-   int fd;
-   fcgi_parser_t *msg_parser;
-   fcgi_params_parser_t *params_parser;
-
-   int bytes_in_buf, write_pos;
-   char outBuf[65536];
-   fcgi_process_t *currentProcess;
-};
-
-struct fcgi_process_s {
-   char process_path[4096];
-   char socket_path[4096];
-   int fd;
-   pid_t pid;
-   conn_ctx_t *currentConn;
-   char outBuf[65536];
-};
 
 fcgi_process_t* procs[256];
 unsigned int process_count = 0;
@@ -45,36 +24,26 @@ unsigned int process_count = 0;
 fcgi_process_t *fcgi_spawn(const char *path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    assert(listen_sock != -1);
+   fcgi_process_t *ret = malloc(sizeof(fcgi_process_t));
+   ret->s_un.sun_family = AF_UNIX;
+   sprintf(ret->s_un.sun_path, "/tmp/stdfpm-%d.sock", process_count);
+   unlink(ret->s_un.sun_path);
 
-   struct sockaddr_un s_un;
-   s_un.sun_family = AF_UNIX;
    process_count++;
-   sprintf(s_un.sun_path, "/tmp/stdfpm-%d.sock", process_count);
-   unlink(s_un.sun_path);
-
-   assert(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) != -1);
-   chmod(s_un.sun_path, 0777);
+   assert(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) != -1);
+   chmod(ret->s_un.sun_path, 0777);
    printf("Listening...\n");
    assert(listen(listen_sock, 1024) != -1);
 
    pid_t pid = fork();
    if(pid > 0) {
+      close(listen_sock);
       printf("FastCGI process %s is successfully started with PID=%d\n", path, pid);
-      printf("Connecting UNIX socket: %s\n", s_un.sun_path);
-
-      int client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-      assert(client_sock != -1);
-      assert(connect(client_sock, (struct sockaddr *) &s_un, sizeof(s_un)) != -1);
-      printf("Connection ok\n");
-
-      fcgi_process_t *ret = malloc(sizeof(fcgi_process_t));
       strcpy(ret->process_path, path); // TODO: fix buffer overflow
-      strcpy(ret->socket_path, s_un.sun_path);
       ret->pid = pid;
-      ret->fd = client_sock;
-      ret->currentConn = NULL;
       return ret;
    } else {
+      free(ret);
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
       execv(path, argv);
@@ -82,19 +51,20 @@ fcgi_process_t *fcgi_spawn(const char *path) {
    }
 }
 
-conn_ctx_t *conn_ctx_new() {
-   conn_ctx_t *ret = malloc(sizeof(conn_ctx_t));
+conn_t *conn_new() {
+   conn_t *ret = malloc(sizeof(conn_t));
    assert(ret);
-   ret->msg_parser = fcgi_parser_new();
-   ret->params_parser = fcgi_params_parser_new(4096);
    ret->bytes_in_buf = ret->write_pos = 0;
-   ret->currentProcess = NULL;
+   ret->client = NULL;
+   ret->process = NULL;
    return ret;
 }
 
-void conn_ctx_free(conn_ctx_t *this) {
-   fcgi_parser_free(this->msg_parser);
-   fcgi_params_parser_free(this->params_parser);
+void conn_free(conn_t *this) {
+   if(this->client) {
+      fcgi_parser_free(this->client->msg_parser);
+      fcgi_params_parser_free(this->client->params_parser);
+   }
    free(this);
 }
 
@@ -131,7 +101,7 @@ static void setnonblocking(int fd) {
 }
 
 void onconnect(struct epoll_event *evt);
-void onsocketread(conn_ctx_t *ctx);
+void onsocketread(conn_t *ctx);
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 void onfcgiparam(const char *key, const char *value, void *userdata);
 void ondisconnect(struct epoll_event *evt);
@@ -144,12 +114,19 @@ void onconnect(struct epoll_event *evt) {
    assert(client_sock != -1);
    setnonblocking(client_sock);
 
-   conn_ctx_t *ctx = conn_ctx_new();
+   conn_t *ctx = conn_new();
    ctx->fd = client_sock;
-   ctx->msg_parser->callback = onfcgimessage;
-   ctx->msg_parser->userdata = ctx;
-   ctx->params_parser->callback = onfcgiparam;
-   ctx->params_parser->userdata = ctx;
+   ctx->type = STDFPM_FCGI_CLIENT;
+   ctx->client = malloc(sizeof(fcgi_client_t));
+   memset(ctx->client, 0, sizeof(fcgi_client_t));
+
+   ctx->client->msg_parser = fcgi_parser_new();
+   ctx->client->msg_parser->callback = onfcgimessage;
+   ctx->client->msg_parser->userdata = ctx;
+
+   ctx->client->params_parser = fcgi_params_parser_new(4096);
+   ctx->client->params_parser->callback = onfcgiparam;
+   ctx->client->params_parser->userdata = ctx;
 
    listen_ctx.ev.data.ptr = ctx;
    assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, ctx->fd, &listen_ctx.ev) == 0);
@@ -157,39 +134,48 @@ void onconnect(struct epoll_event *evt) {
    printf("Done\n");
 }
 
-void onsocketread(conn_ctx_t *ctx) {
-   printf("onsocketread(%d)\n", ctx);
+void onsocketread(conn_t *conn) {
+   printf("onsocketread(%lx)\n", (long unsigned int) conn);
    static char buf[4096];
    int bytes_read;
-   while((bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) > 0) {
+   while((bytes_read = recv(conn->fd, buf, sizeof(buf), 0)) > 0) {
       printf("[main] got %d bytes: %s\n", bytes_read, buf);
 
-      if(!ctx->currentProcess) {
+      if(conn->type == STDFPM_FCGI_CLIENT && !conn->pipe_to) {
          printf("[main] wrote %d bytes to FastCGI parser\n", bytes_read);
-         fcgi_parser_write(ctx->msg_parser, buf, bytes_read);
+         fcgi_parser_write(conn->client->msg_parser, buf, bytes_read);
       }
 
-      if(ctx->bytes_in_buf + bytes_read < sizeof(ctx->outBuf)) {
-         printf("[main] wrote %d bytes to ctx->outBuf\n", bytes_read);
-         memcpy(&ctx->outBuf[ctx->bytes_in_buf], buf, bytes_read);
-         ctx->bytes_in_buf += bytes_read;
+      if(conn->type != STDFPM_FCGI_CLIENT && !conn->pipe_to) {
+         continue; // discard
       }
+
+//      if(conn->bytes_in_buf + bytes_read < sizeof(conn->outBuf)) {
+//         printf("[main] wrote %d bytes to ctx->outBuf\n", bytes_read);
+//         memcpy(&conn->outBuf[conn->bytes_in_buf], buf, bytes_read);
+//         conn->bytes_in_buf += bytes_read;
+//      }
    }
 }
 
-void onsocketwriteok(conn_ctx_t *ctx) {
-   printf("onsocketwriteok(%d)\n", ctx);
-   if(!ctx->currentProcess) {
-      printf("no fastcgi process to write\n");
+void onsocketwriteok(conn_t *conn) {
+   printf("[%d] onsocketwriteok(%lx)\n", conn->type, (long unsigned int) conn);
+   if(!conn->pipe_to) {
+      printf("no process to write\n");
       return;
    }
-   while(ctx->bytes_in_buf > 0) {
-      int bytes_written = send(ctx->currentProcess->fd, &ctx->outBuf[ctx->write_pos], ctx->bytes_in_buf, 0);
+   if(conn->bytes_in_buf == 0) {
+      printf("no bytes to write\n");
+      return;
+   }
+   while(conn->bytes_in_buf > 0) {
+      printf("writing\n");
+      int bytes_written = send(conn->pipe_to->fd, &conn->outBuf[conn->write_pos], conn->bytes_in_buf, 0);
       printf("wrote %d bytes to fcgi process\n", bytes_written);
       if(bytes_written <= 0) break;
-      ctx->write_pos += bytes_written;
-      ctx->bytes_in_buf -= bytes_written;
-      if(ctx->bytes_in_buf <= 0) ctx->bytes_in_buf = 0;
+      conn->write_pos += bytes_written;
+      conn->bytes_in_buf -= bytes_written;
+      if(conn->bytes_in_buf <= 0) conn->bytes_in_buf = 0;
    }
 }
 
@@ -197,21 +183,30 @@ void onsocketwriteok(conn_ctx_t *ctx) {
 
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    printf("[main] got fcgi message: type=%d request_id=%d\n", hdr->type, hdr->requestId);
-   conn_ctx_t *ctx = userdata;
-   if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->params_parser, data, hdr->contentLength);
+   conn_t *conn = userdata;
+   if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(conn->client->params_parser, data, hdr->contentLength);
 }
 
 void onfcgiparam(const char *key, const char *value, void *userdata) {
-   conn_ctx_t *ctx = userdata;
+   conn_t *conn = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       printf("Got script filename: %s\n", value);
       if(!strcmp(value, "/var/www/html/test.fcgi")) {
          printf("Starting %s...\n", value);
-         fcgi_process_t *proc = fcgi_spawn(value);
-         ctx->currentProcess = proc;
-         proc->currentConn = ctx;
-         listen_ctx.ev.data.ptr = NULL;
-         assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, proc->fd, &listen_ctx.ev) == 0);
+         conn_t *new_conn = conn_new();
+         new_conn->type = STDFPM_FCGI_PROCESS;
+         new_conn->process = fcgi_spawn(value);
+         new_conn->pipe_to = conn;
+         printf("Connecting UNIX socket: %s\n", new_conn->process->s_un.sun_path);
+
+         new_conn->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+         assert(new_conn->fd != -1);
+         assert(connect(new_conn->fd, (struct sockaddr *) &new_conn->process->s_un, sizeof(new_conn->process->s_un)) != -1);
+         printf("Connection ok\n");
+
+         listen_ctx.ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+         listen_ctx.ev.data.ptr = new_conn;
+         assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, new_conn->fd, &listen_ctx.ev) == 0);
       } else {
          printf("Unknown fastcgi process: %s\n", value);
       }
@@ -220,9 +215,9 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
 void ondisconnect(struct epoll_event *evt) {
    printf("[main] connection closed, removing from interest: %d\n", evt->data.fd);
-   conn_ctx_t *ctx = evt->data.ptr;
+   conn_t *ctx = evt->data.ptr;
    assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL) == 0);
-   conn_ctx_free(ctx);
+   conn_free(ctx);
 }
 
 int main() {
@@ -244,7 +239,7 @@ int main() {
 
       for(int i = 0; i < event_count; i++) {
          printf("[main] event %d: %08x sock = %d\n", i, pevents[i].events, pevents[i].data.fd);
-         conn_ctx_t *ctx = pevents[i].data.ptr;
+         conn_t *ctx = pevents[i].data.ptr;
          if(pevents[i].data.fd == listen_ctx.sock) {
             onconnect(&pevents[i]);
             continue;
