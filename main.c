@@ -21,6 +21,19 @@
 fcgi_process_t* procs[256];
 unsigned int process_count = 0;
 
+static const char *conntype_to_str(unsigned int type) {
+   static const char LISTEN_SOCK[] = "LISTEN_SOCK",
+      FCGI_CLIENT[] = "FCGI_CLIENT",
+      FCGI_PROCESS[] = "FCGI_PROCESS",
+      UNKNOWN[] = "UNKNOWN";
+   switch(type) {
+      case STDFPM_LISTEN_SOCK: return LISTEN_SOCK;
+      case STDFPM_FCGI_CLIENT: return FCGI_CLIENT;
+      case STDFPM_FCGI_PROCESS: return FCGI_PROCESS;
+      default: return UNKNOWN;
+   }
+}
+
 fcgi_process_t *fcgi_spawn(const char *path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    assert(listen_sock != -1);
@@ -135,14 +148,14 @@ void onconnect(struct epoll_event *evt) {
 }
 
 void onsocketread(conn_t *conn) {
-   printf("onsocketread(%lx)\n", (long unsigned int) conn);
+   printf("[%s] onsocketread(%lx)\n", conntype_to_str(conn->type), (long unsigned int) conn);
    static char buf[4096];
    int bytes_read;
    while((bytes_read = recv(conn->fd, buf, sizeof(buf), 0)) > 0) {
-      printf("[main] got %d bytes: %s\n", bytes_read, buf);
+      printf("[%s] got %d bytes: %s\n", conntype_to_str(conn->type), bytes_read, buf);
 
       if(conn->type == STDFPM_FCGI_CLIENT && !conn->pipe_to) {
-         printf("[main] wrote %d bytes to FastCGI parser\n", bytes_read);
+         printf("[%s] wrote %d bytes to FastCGI parser\n", conntype_to_str(conn->type), bytes_read);
          fcgi_parser_write(conn->client->msg_parser, buf, bytes_read);
       }
 
@@ -150,32 +163,44 @@ void onsocketread(conn_t *conn) {
          continue; // discard
       }
 
-//      if(conn->bytes_in_buf + bytes_read < sizeof(conn->outBuf)) {
-//         printf("[main] wrote %d bytes to ctx->outBuf\n", bytes_read);
-//         memcpy(&conn->outBuf[conn->bytes_in_buf], buf, bytes_read);
-//         conn->bytes_in_buf += bytes_read;
-//      }
+      if(conn->bytes_in_buf + bytes_read < sizeof(conn->outBuf)) {
+         printf("[%s] put %d bytes to outBuf\n", conntype_to_str(conn->type), bytes_read);
+         memcpy(&conn->outBuf[conn->bytes_in_buf], buf, bytes_read);
+         conn->bytes_in_buf += bytes_read;
+
+         if(conn->pipe_to) {
+            conn_t *from = conn->pipe_to;
+	         printf("writing %d bytes\n", conn->bytes_in_buf);
+	         int bytes_written = send(from->fd, &conn->outBuf[conn->write_pos], conn->bytes_in_buf, 0);
+	         printf("wrote %d bytes\n", bytes_written);
+	         if(bytes_written <= 0) break;
+	         conn->write_pos += bytes_written;
+	         conn->bytes_in_buf -= bytes_written;
+	         if(conn->bytes_in_buf <= 0) conn->bytes_in_buf = 0;
+         }
+      }
    }
 }
 
 void onsocketwriteok(conn_t *conn) {
-   printf("[%d] onsocketwriteok(%lx)\n", conn->type, (long unsigned int) conn);
+   printf("[%s] onsocketwriteok(%lx)\n", conntype_to_str(conn->type), (long unsigned int) conn);
    if(!conn->pipe_to) {
       printf("no process to write\n");
       return;
    }
-   if(conn->bytes_in_buf == 0) {
+   conn_t *from = conn->pipe_to;
+   if(from->bytes_in_buf == 0) {
       printf("no bytes to write\n");
       return;
    }
-   while(conn->bytes_in_buf > 0) {
+   while(from->bytes_in_buf > 0) {
       printf("writing\n");
-      int bytes_written = send(conn->pipe_to->fd, &conn->outBuf[conn->write_pos], conn->bytes_in_buf, 0);
+      int bytes_written = send(conn->fd, &from->outBuf[from->write_pos], from->bytes_in_buf, 0);
       printf("wrote %d bytes to fcgi process\n", bytes_written);
       if(bytes_written <= 0) break;
-      conn->write_pos += bytes_written;
-      conn->bytes_in_buf -= bytes_written;
-      if(conn->bytes_in_buf <= 0) conn->bytes_in_buf = 0;
+      from->write_pos += bytes_written;
+      from->bytes_in_buf -= bytes_written;
+      if(from->bytes_in_buf <= 0) from->bytes_in_buf = 0;
    }
 }
 
@@ -214,8 +239,8 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 }
 
 void ondisconnect(struct epoll_event *evt) {
-   printf("[main] connection closed, removing from interest: %d\n", evt->data.fd);
    conn_t *ctx = evt->data.ptr;
+   printf("[%s] closed, removing from interest", conntype_to_str(ctx->type));
    assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL) == 0);
    conn_free(ctx);
 }
