@@ -113,6 +113,11 @@ static void setnonblocking(int fd) {
    assert(fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
 }
 
+static void setcloseonexec(int fd) {
+   int flags = fcntl(fd, F_GETFD, 0);
+   assert(fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != -1);
+}
+
 void onconnect(struct epoll_event *evt);
 void onsocketread(conn_t *ctx);
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
@@ -126,6 +131,7 @@ void onconnect(struct epoll_event *evt) {
    int client_sock = accept(listen_ctx.sock, (struct sockaddr *) &client_sockaddr, &len);
    assert(client_sock != -1);
    setnonblocking(client_sock);
+   setcloseonexec(client_sock);
 
    conn_t *ctx = conn_new();
    ctx->fd = client_sock;
@@ -147,12 +153,20 @@ void onconnect(struct epoll_event *evt) {
    printf("Done\n");
 }
 
+void hexdump(const unsigned char *buf, size_t size) {
+   for(int i = 0; i < size; i++) {
+      printf("%02x ", buf[i]);;
+   }
+   printf("\n");
+}
+
 void onsocketread(conn_t *conn) {
    printf("[%s] onsocketread(%lx)\n", conntype_to_str(conn->type), (long unsigned int) conn);
    static char buf[4096];
    int bytes_read;
    while((bytes_read = recv(conn->fd, buf, sizeof(buf), 0)) > 0) {
-      printf("[%s] got %d bytes: %s\n", conntype_to_str(conn->type), bytes_read, buf);
+      printf("[%s] got %d bytes from socket %d: ", conntype_to_str(conn->type), bytes_read, conn->fd);
+      hexdump(buf, bytes_read);
 
       if(conn->type == STDFPM_FCGI_CLIENT && !conn->pipe_to) {
          printf("[%s] wrote %d bytes to FastCGI parser\n", conntype_to_str(conn->type), bytes_read);
@@ -170,19 +184,27 @@ void onsocketread(conn_t *conn) {
 
          if(conn->pipe_to) {
             conn_t *from = conn->pipe_to;
-	         printf("writing %d bytes\n", conn->bytes_in_buf);
-	         int bytes_written = send(from->fd, &conn->outBuf[conn->write_pos], conn->bytes_in_buf, 0);
-	         printf("wrote %d bytes\n", bytes_written);
+	         printf("writing %d bytes\n", bytes_read);
+	         int bytes_written = write(from->fd, conn->outBuf, bytes_read);
+            printf("wrote %d bytes to socket %d: ", bytes_written, from->fd); hexdump(conn->outBuf, bytes_written);
+	         printf("wrote %d bytes to %s\n", bytes_written, conntype_to_str(from->type));
 	         if(bytes_written <= 0) break;
 	         conn->write_pos += bytes_written;
 	         conn->bytes_in_buf -= bytes_written;
-	         if(conn->bytes_in_buf <= 0) conn->bytes_in_buf = 0;
+	         if(conn->bytes_in_buf <= 0) conn->bytes_in_buf = conn->write_pos = 0;
+            printf("bytes_in_buf = %d write_pos = %d\n", conn->bytes_in_buf, conn->write_pos);
          }
       }
+   }
+   if(bytes_read == 0) {
+      printf("WARNING: bytes_read = %d, closing socket\n", bytes_read);
+      // fastcgi process is closed, also close the client's connection
+      if(conn->pipe_to) close(conn->pipe_to->fd);
    }
 }
 
 void onsocketwriteok(conn_t *conn) {
+   return;
    printf("[%s] onsocketwriteok(%lx)\n", conntype_to_str(conn->type), (long unsigned int) conn);
    if(!conn->pipe_to) {
       printf("no process to write\n");
@@ -196,11 +218,11 @@ void onsocketwriteok(conn_t *conn) {
    while(from->bytes_in_buf > 0) {
       printf("writing\n");
       int bytes_written = send(conn->fd, &from->outBuf[from->write_pos], from->bytes_in_buf, 0);
-      printf("wrote %d bytes to fcgi process\n", bytes_written);
+      printf("wrote %d bytes to %s\n", bytes_written, conntype_to_str(conn->type));
       if(bytes_written <= 0) break;
       from->write_pos += bytes_written;
       from->bytes_in_buf -= bytes_written;
-      if(from->bytes_in_buf <= 0) from->bytes_in_buf = 0;
+      if(from->bytes_in_buf <= 0) from->bytes_in_buf = from->write_pos = 0;
    }
 }
 
@@ -222,6 +244,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
          new_conn->type = STDFPM_FCGI_PROCESS;
          new_conn->process = fcgi_spawn(value);
          new_conn->pipe_to = conn;
+         conn->pipe_to = new_conn;
          printf("Connecting UNIX socket: %s\n", new_conn->process->s_un.sun_path);
 
          new_conn->fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -240,7 +263,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
 void ondisconnect(struct epoll_event *evt) {
    conn_t *ctx = evt->data.ptr;
-   printf("[%s] closed, removing from interest", conntype_to_str(ctx->type));
+   printf("[%s] closed, removing from interest\n", conntype_to_str(ctx->type));
    assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL) == 0);
    conn_free(ctx);
 }
