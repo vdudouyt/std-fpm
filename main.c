@@ -199,7 +199,10 @@ void onsocketread(conn_t *conn) {
    if(bytes_read == 0) {
       printf("WARNING: bytes_read = %d, closing socket\n", bytes_read);
       // fastcgi process is closed, also close the client's connection
-      if(conn->pipe_to) close(conn->pipe_to->fd);
+      if(conn->pipe_to) {
+         epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, conn->pipe_to->fd, NULL);
+         close(conn->pipe_to->fd);
+      }
    }
 }
 
@@ -264,7 +267,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 void ondisconnect(struct epoll_event *evt) {
    conn_t *ctx = evt->data.ptr;
    printf("[%s] closed, removing from interest\n", conntype_to_str(ctx->type));
-   assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL) == 0);
+   epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL);
    conn_free(ctx);
 }
 
