@@ -71,6 +71,7 @@ void fd_ctx_free(fd_ctx_t *this) {
    if(this->client) {
       fcgi_parser_free(this->client->msg_parser);
       fcgi_params_parser_free(this->client->params_parser);
+      free(this->client);
    }
    free(this);
 }
