@@ -36,15 +36,11 @@ static void setcloseonexec(int fd) {
 }
 
 static const char *conntype_to_str(unsigned int type) {
-   static const char LISTEN_SOCK[] = "LISTEN_SOCK",
-      FCGI_CLIENT[] = "FCGI_CLIENT",
-      FCGI_PROCESS[] = "FCGI_PROCESS",
-      UNKNOWN[] = "UNKNOWN";
    switch(type) {
-      case STDFPM_LISTEN_SOCK: return LISTEN_SOCK;
-      case STDFPM_FCGI_CLIENT: return FCGI_CLIENT;
-      case STDFPM_FCGI_PROCESS: return FCGI_PROCESS;
-      default: return UNKNOWN;
+      case STDFPM_LISTEN_SOCK: return "LISTEN_SOCK";
+      case STDFPM_FCGI_CLIENT: return "FCGI_CLIENT";
+      case STDFPM_FCGI_PROCESS: return "FCGI_PROCESS";
+      default: return "UNKNOWN";
    }
 }
 
