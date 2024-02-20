@@ -159,7 +159,10 @@ void onsocketwriteok(fd_ctx_t *ctx) {
 
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    fd_ctx_t *ctx = userdata;
-   log_write(MAINLOG, "[%s] got fcgi message: type=%d request_id=%d", ctx->name, hdr->type, hdr->requestId);
+
+   log_write(MAINLOG, "[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
+      ctx->name, fcgitype_to_string(hdr->type), hdr->requestId, hdr->contentLength); 
+
    if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
 }
 
