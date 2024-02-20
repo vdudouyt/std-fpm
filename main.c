@@ -188,7 +188,7 @@ int main() {
 
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.events = EPOLLIN;
    ev.data.ptr = ctx;
    assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
 
