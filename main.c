@@ -22,6 +22,7 @@
 #define BUF_SIZE 65536
 
 FILE *MAINLOG = NULL;
+int epollfd;
 
 static void setnonblocking(int fd) {
    int flags = fcntl(fd, F_GETFL, 0);
@@ -92,13 +93,6 @@ static int create_listening_socket() {
    return listen_sock;
 }
 
-typedef struct {
-   int efd, sock;
-   struct epoll_event ev;
-} listen_ctx_t;
-
-listen_ctx_t listen_ctx;
-
 void onconnect(fd_ctx_t *lctx);
 void onsocketread(fd_ctx_t *ctx);
 void ondisconnect(fd_ctx_t *ctx);
@@ -128,8 +122,12 @@ void onconnect(fd_ctx_t *lctx) {
    ctx->client->params_parser->callback = onfcgiparam;
    ctx->client->params_parser->userdata = ctx;
 
-   listen_ctx.ev.data.ptr = ctx;
-   assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, ctx->fd, &listen_ctx.ev) == 0);
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.data.ptr = ctx;
+
+   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
 }
 
 void hexdump(const unsigned char *buf, size_t size) {
@@ -173,30 +171,32 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
 void ondisconnect(fd_ctx_t *ctx) {
    log_write(MAINLOG, "[%s] connection closed, removing from interest", ctx->name);
-   epoll_ctl(listen_ctx.efd, EPOLL_CTL_DEL, ctx->fd, NULL);
+   epoll_ctl(epollfd, EPOLL_CTL_DEL, ctx->fd, NULL);
    fd_ctx_free(ctx);
 }
 
 int main() {
-   listen_ctx.sock = create_listening_socket();
-   listen_ctx.efd = epoll_create( 0xCAFE ); 
-   assert(listen_ctx.efd != -1);
-   memset(&listen_ctx.ev, 0, sizeof(struct epoll_event));
-   listen_ctx.ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   int listen_sock = create_listening_socket();
+   epollfd = epoll_create( 0xCAFE );
 
-   fd_ctx_t *ctx = fd_ctx_new(listen_ctx.sock, STDFPM_LISTEN_SOCK);
+   assert(epollfd != -1);
+
+   fd_ctx_t *ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
    fd_ctx_set_name(ctx, "listen_sock");
    log_set_echo(true);
    log_write(MAINLOG, "[%s] server created", ctx->name);
 
-   listen_ctx.ev.data.ptr = ctx;
-   assert(epoll_ctl(listen_ctx.efd, EPOLL_CTL_ADD, listen_ctx.sock, &listen_ctx.ev) == 0);
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.data.ptr = ctx;
+   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
 
    const unsigned int EVENTS_COUNT = 20;
    struct epoll_event pevents[EVENTS_COUNT];
 
    while(1) {
-      int event_count = epoll_wait(listen_ctx.efd, pevents, EVENTS_COUNT, 10000);
+      int event_count = epoll_wait(epollfd, pevents, EVENTS_COUNT, 10000);
       if(event_count < 0) exit(-1);
 
       for(int i = 0; i < event_count; i++) {
