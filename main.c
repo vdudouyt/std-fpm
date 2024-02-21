@@ -220,7 +220,7 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
 
    if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
    if(hdr->type == FCGI_STDIN) {
-      static char not_found[] = "Content-type: text/html\n\nFile not found.\n";
+      static char not_found[] = "Status: 404\nContent-type: text/html\n\nFile not found.\n";
       buf_discard(&ctx->outBuf);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, "", 0);
