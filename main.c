@@ -2,17 +2,13 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/select.h>
 #include <sys/fcntl.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <stdarg.h>
 #include <ctype.h>
-//#include <gmodule.h>
 
 #include "fcgi_parser.h"
 #include "fcgi_params_parser.h"
