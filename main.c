@@ -17,8 +17,6 @@
 #include "log.h"
 #include "buf.h"
 
-#define BUF_SIZE 65536
-
 FILE *MAINLOG = NULL;
 int epollfd;
 
