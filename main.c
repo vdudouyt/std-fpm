@@ -19,6 +19,7 @@
 #include "main.h"
 #include "fcgitypes.h"
 #include "log.h"
+#include "buf.h"
 
 #define BUF_SIZE 65536
 
@@ -49,8 +50,8 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    assert(ret);
 
    ret->fd = fd;
-   ret->bytes_in_buf = ret->write_pos = 0;
    ret->type = type;
+   buf_discard(&ret->outBuf);
    
    strcpy(ret->name, "");
    ret->client = NULL;
@@ -152,6 +153,26 @@ void onsocketread(fd_ctx_t *ctx) {
 
 void onsocketwriteok(fd_ctx_t *ctx) {
    log_write(MAINLOG, "[%s] socket is ready for writing", ctx->name);
+   size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
+   log_write(MAINLOG, "[%s] %d bytes to write", ctx->name, bytes_to_write);
+   if(bytes_to_write > 0) {
+	   int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
+
+      if(bytes_written <= 0) {
+         log_write(MAINLOG, "[%s] write failed, discarding buffer", ctx->name);
+         buf_discard(&ctx->outBuf);
+         return;
+      }
+
+      ctx->outBuf.readPos += bytes_written;
+
+      if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
+         log_write(MAINLOG, "[%s] write completed", ctx->name);
+         buf_discard(&ctx->outBuf);
+         close(ctx->fd);
+         ondisconnect(ctx);
+      }
+   }
 }
 
 static void escape(unsigned char *out, const unsigned char *in, size_t input_length) {
@@ -169,6 +190,23 @@ static void escape(unsigned char *out, const unsigned char *in, size_t input_len
    out[d++] = '\0';
 }
 
+void buf_fcgi_write(buf_t *outBuf, unsigned int requestId, unsigned int type, const char *content, size_t contentLength) {
+   if(sizeof(outBuf->data) - outBuf->writePos < contentLength + 8 + 4) return;
+   const unsigned char paddingLength = (4 - (contentLength % 4)) % 4;
+   char *out = &outBuf->data[outBuf->writePos];
+   out[0] = 0x01; // version
+   out[1] = type;
+   out[2] = (requestId & 0xff00) > 8;
+   out[3] = requestId & 0xff;
+   out[4] = (contentLength & 0xff00) > 8;
+   out[5] = contentLength & 0xff;
+   out[6] = paddingLength;
+   out[7] = 0;    // reserved
+   memcpy(&out[8], content, contentLength);
+   memset(&out[8 + contentLength], 0, paddingLength);
+   outBuf->writePos += 8 + contentLength + paddingLength;
+}
+
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    fd_ctx_t *ctx = userdata;
 
@@ -181,6 +219,15 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    }
 
    if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
+   if(hdr->type == FCGI_STDIN) {
+      static char not_found[] = "Content-type: text/html\n\nFile not found.\n";
+      buf_discard(&ctx->outBuf);
+      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
+      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, "", 0);
+      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+      log_write(MAINLOG, "wrote %d bytes", ctx->outBuf.writePos - ctx->outBuf.readPos);
+      hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], ctx->outBuf.writePos - ctx->outBuf.readPos);
+   }
 }
 
 void onfcgiparam(const char *key, const char *value, void *userdata) {

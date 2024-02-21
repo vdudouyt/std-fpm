@@ -1,4 +1,5 @@
 #pragma once
+#include "buf.h"
 
 typedef struct fd_ctx_s fd_ctx_t;
 typedef struct fcgi_client_s fcgi_client_t;
@@ -10,10 +11,9 @@ struct fcgi_client_s {
 
 struct fd_ctx_s {
    int fd;
-   int bytes_in_buf, write_pos;
    enum { STDFPM_LISTEN_SOCK = 1, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
 
    char name[64];
-   char outBuf[65536];
+   buf_t outBuf;
    fcgi_client_t *client;
 };
