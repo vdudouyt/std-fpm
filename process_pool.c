@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include "log.h"
 #include "process_pool.h"
 #include "fcgi_process.h"
@@ -24,6 +26,11 @@ fcgi_process_t *pool_borrow_process(const char *path) {
    if(!bucket->proc_next) bucket->proc_next = fcgi_spawn(path);
 
    fcgi_process_t *ret = bucket->proc_next;
+   ret->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+   assert(ret->fd != -1);
+   assert(connect(ret->fd, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) != -1);
+   log_write("[process pool] opened connection to %s", ret->s_un.sun_path);
+
    bucket->proc_next = bucket->proc_next->next;
    ret->bucket = bucket;
    return ret;
@@ -35,6 +42,7 @@ void pool_release_process(fcgi_process_t *proc) {
 
    proc->next = bucket->proc_next;
    bucket->proc_next = proc;
+   close(proc->fd);
 }
 
 fcgi_process_bucket_t *pool_create_bucket(const char *path) {
