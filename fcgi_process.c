@@ -29,7 +29,7 @@ fcgi_process_t *fcgi_spawn(const char *path) {
    pid_t pid = fork();
    if(pid > 0) {
       close(listen_sock);
-      log_write("[fastcgi spawner] FastCGI process %s is successfully started with PID=%d", path, pid);
+      log_write("[fastcgi spawner] FastCGI process %s is listening at %s", path, ret->s_un.sun_path);
       ret->pid = pid;
       return ret;
    } else {

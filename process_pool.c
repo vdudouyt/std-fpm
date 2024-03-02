@@ -22,7 +22,6 @@ fcgi_process_t *pool_borrow_process(const char *path) {
    if(!bucket) bucket = pool_create_bucket(path);
    log_write("[process pool] Got a bucket: %08x", bucket);
    if(!bucket->proc_next) bucket->proc_next = fcgi_spawn(path);
-   log_write("Ok");
 
    fcgi_process_t *ret = bucket->proc_next;
    bucket->proc_next = bucket->proc_next->next;
