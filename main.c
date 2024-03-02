@@ -43,6 +43,7 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
    assert(ret);
 
+   sprintf(ret->name, "<not set>");
    ret->fd = fd;
    ret->type = type;
    buf_discard(&ret->outBuf);
