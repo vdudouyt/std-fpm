@@ -16,6 +16,7 @@ fcgi_process_t *fcgi_spawn(const char *path) {
    fcgi_process_t *ret = malloc(sizeof(fcgi_process_t));
    memset(ret, sizeof(fcgi_process_t), 0);
    ret->s_un.sun_family = AF_UNIX;
+   ret->next = ret->bucket = NULL;
    sprintf(ret->s_un.sun_path, "/tmp/stdfpm-%d.sock", process_count);
    unlink(ret->s_un.sun_path);
 
