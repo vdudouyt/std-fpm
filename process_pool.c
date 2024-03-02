@@ -31,7 +31,7 @@ fcgi_process_t *pool_borrow_process(const char *path) {
 
 void pool_release_process(fcgi_process_t *proc) {
    fcgi_process_bucket_t *bucket = proc->bucket;
-   log_write("[process pool] Releasing process %d from bucket %s", proc->pid, bucket->process_path);
+   log_write("[process pool] Releasing process %d to bucket %s", proc->pid, bucket->process_path);
 
    proc->next = bucket->proc_next;
    bucket->proc_next = proc;
