@@ -16,6 +16,7 @@
 #include "fcgitypes.h"
 #include "log.h"
 #include "buf.h"
+#include "process_pool.h"
 
 int epollfd;
 
@@ -229,6 +230,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       log_write("[%s] got script filename: %s", ctx->name, value);
+      fcgi_process_t *proc = pool_borrow_process(value);
    }
 }
 
