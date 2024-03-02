@@ -4,12 +4,13 @@
 #include "log.h"
 
 static bool log_echo = false;
+FILE *f = NULL;
 
 void log_set_echo(bool new_value) {
    log_echo = true;
 }
 
-void log_write(FILE *f, const char *fmt, ...) {
+void log_write(const char *fmt, ...) {
    time_t rawtime;
    time(&rawtime);
    struct tm *info = localtime(&rawtime);

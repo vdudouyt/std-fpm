@@ -17,7 +17,6 @@
 #include "log.h"
 #include "buf.h"
 
-FILE *MAINLOG = NULL;
 int epollfd;
 
 static void setnonblocking(int fd) {
@@ -105,7 +104,7 @@ void onconnect(fd_ctx_t *lctx) {
    fd_ctx_set_name(ctx, "client_%d", ctr++);
    ctx->client = malloc(sizeof(fcgi_client_t));
    memset(ctx->client, 0, sizeof(fcgi_client_t));
-   log_write(MAINLOG, "[%s] new connection accepted: %s", lctx->name, ctx->name);
+   log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
 
    ctx->client->msg_parser = fcgi_parser_new();
    ctx->client->msg_parser->callback = onfcgimessage;
@@ -131,29 +130,29 @@ void hexdump(const unsigned char *buf, size_t size) {
 }
 
 void onsocketread(fd_ctx_t *ctx) {
-   log_write(MAINLOG, "[%s] starting onsocketread()", ctx->name);
+   log_write("[%s] starting onsocketread()", ctx->name);
    static char buf[4096];
    int bytes_read;
    while((bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) > 0) {
-      log_write(MAINLOG, "[%s] received %d bytes", ctx->name, bytes_read);
+      log_write("[%s] received %d bytes", ctx->name, bytes_read);
       hexdump(buf, bytes_read);
 
       if(ctx->type == STDFPM_FCGI_CLIENT) {
-         log_write(MAINLOG, "[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
+         log_write("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
          fcgi_parser_write(ctx->client->msg_parser, buf, bytes_read);
       }
    }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
-   log_write(MAINLOG, "[%s] socket is ready for writing", ctx->name);
+   log_write("[%s] socket is ready for writing", ctx->name);
    size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
-   log_write(MAINLOG, "[%s] %d bytes to write", ctx->name, bytes_to_write);
+   log_write("[%s] %d bytes to write", ctx->name, bytes_to_write);
    if(bytes_to_write > 0) {
 	   int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
 
       if(bytes_written <= 0) {
-         log_write(MAINLOG, "[%s] write failed, discarding buffer", ctx->name);
+         log_write("[%s] write failed, discarding buffer", ctx->name);
          buf_discard(&ctx->outBuf);
          return;
       }
@@ -161,7 +160,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
       ctx->outBuf.readPos += bytes_written;
 
       if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
-         log_write(MAINLOG, "[%s] write completed", ctx->name);
+         log_write("[%s] write completed", ctx->name);
          buf_discard(&ctx->outBuf);
          close(ctx->fd);
          ondisconnect(ctx);
@@ -204,22 +203,24 @@ void buf_fcgi_write(buf_t *outBuf, unsigned int requestId, unsigned int type, co
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    fd_ctx_t *ctx = userdata;
 
-   log_write(MAINLOG, "[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
+   log_write("[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
       ctx->name, fcgitype_to_string(hdr->type), hdr->requestId, hdr->contentLength);
+
    if(hdr->contentLength) {
       char escaped_data[4*65536+1];
       escape(escaped_data, data, hdr->contentLength);
-      log_write(MAINLOG, "[%s] message content: \"%s\"", ctx->name, escaped_data);
+      log_write("[%s] message content: \"%s\"", ctx->name, escaped_data);
    }
 
-   if(hdr->type == FCGI_PARAMS) fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
-   if(hdr->type == FCGI_STDIN) {
+   if(hdr->type == FCGI_PARAMS) {
+      fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
+   } else if(hdr->type == FCGI_STDIN) {
       static char not_found[] = "Status: 404\nContent-type: text/html\n\nFile not found.\n";
       buf_discard(&ctx->outBuf);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, "", 0);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
-      log_write(MAINLOG, "wrote %d bytes", ctx->outBuf.writePos - ctx->outBuf.readPos);
+      log_write("wrote %d bytes", ctx->outBuf.writePos - ctx->outBuf.readPos);
       hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], ctx->outBuf.writePos - ctx->outBuf.readPos);
    }
 }
@@ -227,12 +228,12 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
 void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
-      log_write(MAINLOG, "[%s] got script filename: %s", ctx->name, value);
+      log_write("[%s] got script filename: %s", ctx->name, value);
    }
 }
 
 void ondisconnect(fd_ctx_t *ctx) {
-   log_write(MAINLOG, "[%s] connection closed, removing from interest", ctx->name);
+   log_write("[%s] connection closed, removing from interest", ctx->name);
    epoll_ctl(epollfd, EPOLL_CTL_DEL, ctx->fd, NULL);
    fd_ctx_free(ctx);
 }
@@ -246,7 +247,7 @@ int main() {
    fd_ctx_t *ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
    fd_ctx_set_name(ctx, "listen_sock");
    log_set_echo(true);
-   log_write(MAINLOG, "[%s] server created", ctx->name);
+   log_write("[%s] server created", ctx->name);
 
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
