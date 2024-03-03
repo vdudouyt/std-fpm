@@ -71,8 +71,8 @@ void onsocketread(fd_ctx_t *ctx) {
    log_write("[%s] starting onsocketread()", ctx->name);
 
    buf_t *buf_to_write = NULL;
-   if(ctx->type == STDFPM_FCGI_CLIENT) buf_to_write = ctx->pipeTo ? &ctx->pipeTo->outBuf : &ctx->client->inBuf;
-   if(ctx->type == STDFPM_FCGI_PROCESS) buf_to_write = &ctx->pipeTo->outBuf;
+   if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
+   else if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
 
    static char buf[4096];
    int bytes_read;
@@ -184,7 +184,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       fd_ctx_bidirectional_pipe(ctx, newctx);
       add_to_wheel(newctx);
 
-      size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inBuf);
+      size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
       log_write("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
    }
 }
