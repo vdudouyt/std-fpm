@@ -207,12 +207,9 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       log_write("[%s] got script filename: %s", ctx->name, value);
-      static unsigned int ctr = 1;
       fcgi_process_t *proc = pool_borrow_process(value);
-      fd_ctx_t *newctx = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
-      fd_ctx_set_name(newctx, "responder_%d", ctr++);
+      fd_ctx_t *newctx = fd_new_process_ctx(proc);
 
-      newctx->process = proc;
       newctx->pipeTo = ctx;
       ctx->pipeTo = newctx;
       add_to_wheel(newctx);
