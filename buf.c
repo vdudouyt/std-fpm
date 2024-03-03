@@ -2,7 +2,7 @@
 #include <string.h>
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-void buf_discard(buf_t *buf) {
+void buf_reset(buf_t *buf) {
    buf->readPos = buf->writePos = 0;
 }
 
@@ -21,7 +21,7 @@ size_t buf_move(buf_t *this, buf_t *from) {
    size_t ret = buf_write(this, &from->data[from->readPos], from->writePos);
    from->readPos += ret;
    if(from->readPos == from->writePos) {
-      buf_discard(from);
+      buf_reset(from);
    }
    return ret;
 }

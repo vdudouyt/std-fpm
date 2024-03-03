@@ -136,7 +136,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
 
       if(bytes_written <= 0) {
          log_write("[%s] write failed, discarding buffer", ctx->name);
-         buf_discard(&ctx->outBuf);
+         buf_reset(&ctx->outBuf);
          return;
       }
 
@@ -144,7 +144,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
 
       if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
          log_write("[%s] %d bytes written", ctx->name, bytes_written);
-         buf_discard(&ctx->outBuf);
+         buf_reset(&ctx->outBuf);
 
          if(ctx->disconnectAfterWrite) {
             close(ctx->fd);
@@ -203,7 +203,7 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    } else if(hdr->type == FCGI_STDIN) {
       /*
       static char not_found[] = "Status: 404\nContent-type: text/html\n\nFile not found.\n";
-      buf_discard(&ctx->outBuf);
+      buf_reset(&ctx->outBuf);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, "", 0);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);

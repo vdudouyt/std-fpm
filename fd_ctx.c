@@ -11,7 +11,7 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    sprintf(ret->name, "<not set>");
    ret->fd = fd;
    ret->type = type;
-   buf_discard(&ret->outBuf);
+   buf_reset(&ret->outBuf);
    
    strcpy(ret->name, "");
    ret->client = NULL;
