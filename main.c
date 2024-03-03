@@ -18,6 +18,9 @@
 #include "buf.h"
 #include "process_pool.h"
 
+static void onsocketread(fd_ctx_t *ctx);
+static void onsocketwriteok(fd_ctx_t *ctx);
+
 int epollfd;
 
 static void setnonblocking(int fd) {
@@ -42,6 +45,7 @@ static const char *conntype_to_str(unsigned int type) {
 fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
    assert(ret);
+   memset(ret, 0, sizeof(fd_ctx_t));
 
    sprintf(ret->name, "<not set>");
    ret->fd = fd;
@@ -87,6 +91,15 @@ static int create_listening_socket() {
    return listen_sock;
 }
 
+static void add_to_wheel(fd_ctx_t *ctx) {
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.data.ptr = ctx;
+
+   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+}
+
 void onconnect(fd_ctx_t *lctx);
 void onsocketread(fd_ctx_t *ctx);
 void ondisconnect(fd_ctx_t *ctx);
@@ -116,12 +129,7 @@ void onconnect(fd_ctx_t *lctx) {
    ctx->client->params_parser->callback = onfcgiparam;
    ctx->client->params_parser->userdata = ctx;
 
-   struct epoll_event ev;
-   memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-   ev.data.ptr = ctx;
-
-   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+   add_to_wheel(ctx);
 }
 
 void hexdump(const unsigned char *buf, size_t size) {
@@ -133,17 +141,33 @@ void hexdump(const unsigned char *buf, size_t size) {
 
 void onsocketread(fd_ctx_t *ctx) {
    log_write("[%s] starting onsocketread()", ctx->name);
+
+   buf_t *buf_to_write = NULL;
+   if(ctx->type == STDFPM_FCGI_CLIENT) buf_to_write = ctx->pipeTo ? &ctx->pipeTo->outBuf : &ctx->client->inBuf;
+   if(ctx->type == STDFPM_FCGI_PROCESS) buf_to_write = &ctx->pipeTo->outBuf;
+
    static char buf[4096];
    int bytes_read;
-   while((bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) > 0) {
+   while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
       log_write("[%s] received %d bytes", ctx->name, bytes_read);
-      hexdump(buf, bytes_read);
 
-      if(ctx->type == STDFPM_FCGI_CLIENT) {
+      if(bytes_read == 0) {
+         if(ctx->pipeTo) ctx->pipeTo->disconnectAfterWrite = true;
+         close(ctx->fd);
+         ondisconnect(ctx);
+         break;
+      }
+
+      hexdump(buf, bytes_read);
+      buf_write(buf_to_write, buf, bytes_read);
+
+      if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
          log_write("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
          fcgi_parser_write(ctx->client->msg_parser, buf, bytes_read);
       }
    }
+
+   if(ctx->pipeTo) onsocketwriteok(ctx->pipeTo);
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
@@ -151,6 +175,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
    size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
    log_write("[%s] %d bytes to write", ctx->name, bytes_to_write);
    if(bytes_to_write > 0) {
+      hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
 	   int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
 
       if(bytes_written <= 0) {
@@ -162,10 +187,13 @@ void onsocketwriteok(fd_ctx_t *ctx) {
       ctx->outBuf.readPos += bytes_written;
 
       if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
-         log_write("[%s] write completed", ctx->name);
+         log_write("[%s] %d bytes written", ctx->name, bytes_written);
          buf_discard(&ctx->outBuf);
-         close(ctx->fd);
-         ondisconnect(ctx);
+
+         if(ctx->disconnectAfterWrite) {
+            close(ctx->fd);
+            ondisconnect(ctx);
+         }
       }
    }
 }
@@ -217,6 +245,7 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    if(hdr->type == FCGI_PARAMS) {
       fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
    } else if(hdr->type == FCGI_STDIN) {
+      /*
       static char not_found[] = "Status: 404\nContent-type: text/html\n\nFile not found.\n";
       buf_discard(&ctx->outBuf);
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
@@ -224,21 +253,49 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
       buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
       log_write("wrote %d bytes", ctx->outBuf.writePos - ctx->outBuf.readPos);
       hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], ctx->outBuf.writePos - ctx->outBuf.readPos);
+      */
    }
+
+/*
+   if(ctx->client->process) {
+      log_write("Writing %d bytes to client->process", 8 + hdr->contentLength);
+   } else {
+      log_write("FastCGI process is not started yet, writing %d bytes to client->inBuf", 8 + hdr->contentLength);
+   }
+   */
 }
 
 void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       log_write("[%s] got script filename: %s", ctx->name, value);
+      static unsigned int ctr = 1;
       fcgi_process_t *proc = pool_borrow_process(value);
-      pool_release_process(proc);
+      fd_ctx_t *newctx = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
+      fd_ctx_set_name(newctx, "responder_%d", ctr++);
+
+      newctx->process = proc;
+      newctx->pipeTo = ctx;
+      ctx->pipeTo = newctx;
+      add_to_wheel(newctx);
+
+      size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inBuf);
+      log_write("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
    }
 }
 
 void ondisconnect(fd_ctx_t *ctx) {
    log_write("[%s] connection closed, removing from interest", ctx->name);
    epoll_ctl(epollfd, EPOLL_CTL_DEL, ctx->fd, NULL);
+
+   if(ctx->process) {
+      pool_release_process(ctx->process);
+   }
+
+   if(ctx->pipeTo) {
+      ctx->pipeTo->pipeTo = NULL;
+   }
+
    fd_ctx_free(ctx);
 }
 
