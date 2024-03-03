@@ -29,15 +29,6 @@ static void setcloseonexec(int fd) {
    assert(fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != -1);
 }
 
-static const char *conntype_to_str(unsigned int type) {
-   switch(type) {
-      case STDFPM_LISTEN_SOCK: return "LISTEN_SOCK";
-      case STDFPM_FCGI_CLIENT: return "FCGI_CLIENT";
-      case STDFPM_FCGI_PROCESS: return "FCGI_PROCESS";
-      default: return "UNKNOWN";
-   }
-}
-
 static int create_listening_socket() {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    assert(listen_sock != -1);
