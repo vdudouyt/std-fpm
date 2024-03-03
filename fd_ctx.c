@@ -18,15 +18,6 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    return ret;
 }
 
-fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc) {
-   fd_ctx_t *ret = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
-   ret->process = proc;
-
-   static unsigned int ctr = 1;
-   fd_ctx_set_name(ret, "responder_%d", ctr++);
-   return ret;
-}
-
 void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...) {
    va_list args;
    va_start(args, fmt);
@@ -41,6 +32,15 @@ void fd_ctx_free(fd_ctx_t *this) {
       free(this->client);
    }
    free(this);
+}
+
+fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc) {
+   fd_ctx_t *ret = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
+   ret->process = proc;
+
+   static unsigned int ctr = 1;
+   fd_ctx_set_name(ret, "responder_%d", ctr++);
+   return ret;
 }
 
 void fd_ctx_bidirectional_pipe(fd_ctx_t *ctx1, fd_ctx_t *ctx2) {
