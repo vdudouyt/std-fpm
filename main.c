@@ -2,7 +2,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/fcntl.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <assert.h>
@@ -10,6 +9,7 @@
 #include <ctype.h>
 
 #include "fd_ctx.h"
+#include "fdutils.h"
 #include "fcgitypes.h"
 #include "log.h"
 #include "process_pool.h"
@@ -18,16 +18,6 @@ static void onsocketread(fd_ctx_t *ctx);
 static void onsocketwriteok(fd_ctx_t *ctx);
 
 int epollfd;
-
-static void setnonblocking(int fd) {
-   int flags = fcntl(fd, F_GETFL, 0);
-   assert(fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1);
-}
-
-static void setcloseonexec(int fd) {
-   int flags = fcntl(fd, F_GETFD, 0);
-   assert(fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != -1);
-}
 
 static int create_listening_socket() {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -42,7 +32,7 @@ static int create_listening_socket() {
    assert(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) != -1);
    chmod(s_un.sun_path, 0777);
    assert(listen(listen_sock, 1024) != -1);
-   setnonblocking(listen_sock);
+   fd_setnonblocking(listen_sock);
 
    return listen_sock;
 }
@@ -67,8 +57,8 @@ void onconnect(fd_ctx_t *lctx) {
    int len = sizeof(client_sockaddr);
    int client_sock = accept(lctx->fd, (struct sockaddr *) &client_sockaddr, &len);
    assert(client_sock != -1);
-   setnonblocking(client_sock);
-   setcloseonexec(client_sock);
+   fd_setnonblocking(client_sock);
+   fd_setcloseonexec(client_sock);
 
    static unsigned int ctr = 1;
    fd_ctx_t *ctx = fd_ctx_new(client_sock, STDFPM_FCGI_CLIENT);
