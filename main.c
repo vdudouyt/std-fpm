@@ -247,12 +247,7 @@ int main() {
    fd_ctx_set_name(ctx, "listen_sock");
    log_set_echo(true);
    log_write("[%s] server created", ctx->name);
-
-   struct epoll_event ev;
-   memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN;
-   ev.data.ptr = ctx;
-   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+   add_to_wheel(ctx);
 
    const unsigned int EVENTS_COUNT = 20;
    struct epoll_event pevents[EVENTS_COUNT];
