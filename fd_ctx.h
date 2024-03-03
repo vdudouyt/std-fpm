@@ -29,5 +29,6 @@ fd_ctx_t *fd_ctx_new(int fd, int type);
 void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...);
 void fd_ctx_free(fd_ctx_t *this);
 
+fd_ctx_t *fd_new_client_ctx(int fd);
 fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc);
 void fd_ctx_bidirectional_pipe(fd_ctx_t *ctx1, fd_ctx_t *ctx2);

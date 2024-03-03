@@ -60,21 +60,10 @@ void onconnect(fd_ctx_t *lctx) {
    fd_setnonblocking(client_sock);
    fd_setcloseonexec(client_sock);
 
-   static unsigned int ctr = 1;
-   fd_ctx_t *ctx = fd_ctx_new(client_sock, STDFPM_FCGI_CLIENT);
-   fd_ctx_set_name(ctx, "client_%d", ctr++);
-   ctx->client = malloc(sizeof(fcgi_client_t));
-   memset(ctx->client, 0, sizeof(fcgi_client_t));
-   log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
-
-   ctx->client->msg_parser = fcgi_parser_new();
+   fd_ctx_t *ctx = fd_new_client_ctx(client_sock);
    ctx->client->msg_parser->callback = onfcgimessage;
-   ctx->client->msg_parser->userdata = ctx;
-
-   ctx->client->params_parser = fcgi_params_parser_new(4096);
    ctx->client->params_parser->callback = onfcgiparam;
-   ctx->client->params_parser->userdata = ctx;
-
+   log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
    add_to_wheel(ctx);
 }
 

@@ -34,6 +34,21 @@ void fd_ctx_free(fd_ctx_t *this) {
    free(this);
 }
 
+fd_ctx_t *fd_new_client_ctx(int fd) {
+   static unsigned int ctr = 1;
+   fd_ctx_t *ret = fd_ctx_new(fd, STDFPM_FCGI_CLIENT);
+   fd_ctx_set_name(ret, "client_%d", ctr++);
+   ret->client = malloc(sizeof(fcgi_client_t));
+   memset(ret->client, 0, sizeof(fcgi_client_t));
+
+   ret->client->msg_parser = fcgi_parser_new();
+   ret->client->msg_parser->userdata = ret;
+
+   ret->client->params_parser = fcgi_params_parser_new(4096);
+   ret->client->params_parser->userdata = ret;
+   return ret;
+}
+
 fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc) {
    fd_ctx_t *ret = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
    ret->process = proc;
