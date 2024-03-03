@@ -200,25 +200,7 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
 
    if(hdr->type == FCGI_PARAMS) {
       fcgi_params_parser_write(ctx->client->params_parser, data, hdr->contentLength);
-   } else if(hdr->type == FCGI_STDIN) {
-      /*
-      static char not_found[] = "Status: 404\nContent-type: text/html\n\nFile not found.\n";
-      buf_reset(&ctx->outBuf);
-      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, not_found, sizeof(not_found) - 1);
-      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_STDOUT, "", 0);
-      buf_fcgi_write(&ctx->outBuf, hdr->requestId, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
-      log_write("wrote %d bytes", ctx->outBuf.writePos - ctx->outBuf.readPos);
-      hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], ctx->outBuf.writePos - ctx->outBuf.readPos);
-      */
    }
-
-/*
-   if(ctx->client->process) {
-      log_write("Writing %d bytes to client->process", 8 + hdr->contentLength);
-   } else {
-      log_write("FastCGI process is not started yet, writing %d bytes to client->inBuf", 8 + hdr->contentLength);
-   }
-   */
 }
 
 void onfcgiparam(const char *key, const char *value, void *userdata) {
