@@ -1,7 +1,10 @@
 #include "fd_ctx.h"
+#include "fdutils.h"
+
 #include <stdarg.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/socket.h>
 
 fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
@@ -32,6 +35,16 @@ void fd_ctx_free(fd_ctx_t *this) {
       free(this->client);
    }
    free(this);
+}
+
+fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener) {
+   struct sockaddr_un client_sockaddr;
+   int len = sizeof(client_sockaddr);
+   int client_sock = accept(listener->fd, (struct sockaddr *) &client_sockaddr, &len);
+   assert(client_sock != -1);
+   fd_setnonblocking(client_sock);
+   fd_setcloseonexec(client_sock);
+   return fd_new_client_ctx(client_sock);
 }
 
 fd_ctx_t *fd_new_client_ctx(int fd) {

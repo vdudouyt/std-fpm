@@ -53,14 +53,7 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 void onfcgiparam(const char *key, const char *value, void *userdata);
 
 void onconnect(fd_ctx_t *lctx) {
-   struct sockaddr_un client_sockaddr;
-   int len = sizeof(client_sockaddr);
-   int client_sock = accept(lctx->fd, (struct sockaddr *) &client_sockaddr, &len);
-   assert(client_sock != -1);
-   fd_setnonblocking(client_sock);
-   fd_setcloseonexec(client_sock);
-
-   fd_ctx_t *ctx = fd_new_client_ctx(client_sock);
+   fd_ctx_t *ctx = fd_ctx_client_accept(lctx);
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
    log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
