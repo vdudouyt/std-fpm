@@ -117,12 +117,12 @@ void onsocketwriteok(fd_ctx_t *ctx) {
       if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
          log_write("[%s] %d bytes written", ctx->name, bytes_written);
          buf_reset(&ctx->outBuf);
-
-         if(ctx->disconnectAfterWrite) {
-            close(ctx->fd);
-            ondisconnect(ctx);
-         }
       }
+   }
+
+   if(ctx->disconnectAfterWrite) {
+      close(ctx->fd);
+      ondisconnect(ctx);
    }
 }
 
