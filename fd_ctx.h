@@ -1,6 +1,8 @@
 #pragma once
 #include "buf.h"
 #include "fcgi_process.h"
+#include "fcgi_parser.h"
+#include "fcgi_params_parser.h"
 
 typedef struct fd_ctx_s fd_ctx_t;
 typedef struct fcgi_client_s fcgi_client_t;
@@ -22,3 +24,7 @@ struct fd_ctx_s {
    fcgi_client_t *client;
    fcgi_process_t *process;
 };
+
+fd_ctx_t *fd_ctx_new(int fd, int type);
+void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...);
+void fd_ctx_free(fd_ctx_t *this);

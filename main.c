@@ -7,15 +7,11 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <ctype.h>
 
-#include "fcgi_parser.h"
-#include "fcgi_params_parser.h"
-#include "main.h"
+#include "fd_ctx.h"
 #include "fcgitypes.h"
 #include "log.h"
-#include "buf.h"
 #include "process_pool.h"
 
 static void onsocketread(fd_ctx_t *ctx);
@@ -40,37 +36,6 @@ static const char *conntype_to_str(unsigned int type) {
       case STDFPM_FCGI_PROCESS: return "FCGI_PROCESS";
       default: return "UNKNOWN";
    }
-}
-
-fd_ctx_t *fd_ctx_new(int fd, int type) {
-   fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
-   assert(ret);
-   memset(ret, 0, sizeof(fd_ctx_t));
-
-   sprintf(ret->name, "<not set>");
-   ret->fd = fd;
-   ret->type = type;
-   buf_discard(&ret->outBuf);
-   
-   strcpy(ret->name, "");
-   ret->client = NULL;
-   return ret;
-}
-
-void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...) {
-   va_list args;
-   va_start(args, fmt);
-   vsnprintf(this->name, sizeof(this->name), fmt, args);
-   va_end(args);
-}
-
-void fd_ctx_free(fd_ctx_t *this) {
-   if(this->client) {
-      fcgi_parser_free(this->client->msg_parser);
-      fcgi_params_parser_free(this->client->params_parser);
-      free(this->client);
-   }
-   free(this);
 }
 
 static int create_listening_socket() {
