@@ -209,9 +209,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       log_write("[%s] got script filename: %s", ctx->name, value);
       fcgi_process_t *proc = pool_borrow_process(value);
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
-
-      newctx->pipeTo = ctx;
-      ctx->pipeTo = newctx;
+      fd_ctx_bidirectional_pipe(ctx, newctx);
       add_to_wheel(newctx);
 
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inBuf);

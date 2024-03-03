@@ -42,3 +42,8 @@ void fd_ctx_free(fd_ctx_t *this) {
    }
    free(this);
 }
+
+void fd_ctx_bidirectional_pipe(fd_ctx_t *ctx1, fd_ctx_t *ctx2) {
+   ctx2->pipeTo = ctx1;
+   ctx1->pipeTo = ctx2;
+}
