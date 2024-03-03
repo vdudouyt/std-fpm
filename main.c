@@ -74,6 +74,8 @@ void onsocketread(fd_ctx_t *ctx) {
    if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
    else if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
 
+   fd_ctx_t *pipeTo = ctx->pipeTo;
+
    static char buf[4096];
    int bytes_read;
    while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
@@ -95,7 +97,7 @@ void onsocketread(fd_ctx_t *ctx) {
       }
    }
 
-   if(ctx->pipeTo) onsocketwriteok(ctx->pipeTo);
+   if(pipeTo) onsocketwriteok(pipeTo);
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
@@ -199,6 +201,7 @@ void ondisconnect(fd_ctx_t *ctx) {
 
    if(ctx->pipeTo) {
       ctx->pipeTo->pipeTo = NULL;
+      ctx->pipeTo = NULL;
    }
 
    fd_ctx_free(ctx);
