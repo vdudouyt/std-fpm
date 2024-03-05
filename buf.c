@@ -6,6 +6,10 @@ void buf_reset(buf_t *buf) {
    buf->readPos = buf->writePos = 0;
 }
 
+size_t buf_bytes_remaining(buf_t *this) {
+   return this->writePos - this->readPos;
+}
+
 bool buf_ready_write(buf_t *buf, size_t size) {
    return buf != NULL && buf->readPos == 0 && (FCGI_BUF_SIZE - buf->writePos) >= size;
 }

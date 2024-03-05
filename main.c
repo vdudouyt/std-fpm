@@ -85,8 +85,6 @@ void onsocketread(fd_ctx_t *ctx) {
          fcgi_parser_write(ctx->client->msg_parser, buf, bytes_read);
       }
    }
-
-   if(pipeTo) pipeTo->writeRequired = true;
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
@@ -177,7 +175,6 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
       log_write("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
-      newctx->writeRequired = true;
    }
 }
 
@@ -208,9 +205,9 @@ int main() {
 
       for(GList *it = wheel; it != NULL; it = it->next) {
          fd_ctx_t *ctx = it->data;
-         log_write("Adding %s write=%d", ctx->name, ctx->writeRequired);
+         log_write("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
          FD_SET(ctx->fd, &read_fds);
-         if(ctx->writeRequired) FD_SET(ctx->fd, &write_fds);
+         if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, &write_fds);
          if(ctx->fd > maxfd) maxfd = ctx->fd;
       }
 
