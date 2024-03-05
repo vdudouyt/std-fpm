@@ -42,11 +42,11 @@ static int create_listening_socket() {
    return listen_sock;
 }
 
-void onconnect(fd_ctx_t *lctx) {
-   fd_ctx_t *ctx = fd_ctx_client_accept(lctx);
+void onconnect(fd_ctx_t *listen_ctx) {
+   fd_ctx_t *ctx = fd_ctx_client_accept(listen_ctx);
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
-   log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
+   log_write("[%s] new connection accepted: %s", listen_ctx->name, ctx->name);
    wheel = g_list_prepend(wheel, ctx);
 }
 
