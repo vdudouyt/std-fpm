@@ -60,9 +60,6 @@ void onsocketread(fd_ctx_t *ctx) {
 
    static char buf[4096];
    int bytes_read;
-   if(!buf_ready_write(buf_to_write, 4096)) {
-      log_write("Buf is not ready: %08x", buf_to_write);
-   }
    while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
       log_write("[%s] received %d bytes", ctx->name, bytes_read);
 
