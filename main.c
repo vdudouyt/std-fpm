@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <gmodule.h>
 
 #include "fd_ctx.h"
@@ -193,6 +194,8 @@ static void stdfpm_cleanup() {
 }
 
 int main() {
+   signal(SIGPIPE, SIG_IGN);
+   signal(SIGCHLD, SIG_IGN);
    int listen_sock = create_listening_socket();
 
    fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
