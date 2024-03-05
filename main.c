@@ -184,7 +184,6 @@ static void stdfpm_cleanup() {
 
          wheel = g_list_delete_link(wheel, it);
          log_write("[%s] connection closed, removing from interest", ctx->name);
-         log_write("[%s] connection time elapsed: %d", ctx->name, time(NULL) - ctx->started_at);
          close(ctx->fd);
          fd_ctx_free(ctx);
       }

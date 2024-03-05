@@ -15,7 +15,6 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    sprintf(ret->name, "<not set>");
    ret->fd = fd;
    ret->type = type;
-   ret->started_at = time(NULL);
    buf_reset(&ret->outBuf);
    
    strcpy(ret->name, "");

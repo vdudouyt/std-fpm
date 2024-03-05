@@ -18,7 +18,6 @@ struct fd_ctx_s {
    enum { STDFPM_LISTEN_SOCK = 1, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
    bool eof;
    struct fd_ctx_s *pipeTo;
-   unsigned int started_at;
 
    char name[64];
    buf_t outBuf;
