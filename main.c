@@ -2,11 +2,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/epoll.h>
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <gmodule.h>
 
 #include "fd_ctx.h"
 #include "fdutils.h"
@@ -14,10 +14,9 @@
 #include "log.h"
 #include "process_pool.h"
 
+GList *wheel = NULL;
 static void onsocketread(fd_ctx_t *ctx);
 static void onsocketwriteok(fd_ctx_t *ctx);
-
-int epollfd;
 
 static int create_listening_socket() {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -37,15 +36,6 @@ static int create_listening_socket() {
    return listen_sock;
 }
 
-static void add_to_wheel(fd_ctx_t *ctx) {
-   struct epoll_event ev;
-   memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-   ev.data.ptr = ctx;
-
-   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
-}
-
 void onconnect(fd_ctx_t *lctx);
 void onsocketread(fd_ctx_t *ctx);
 void ondisconnect(fd_ctx_t *ctx);
@@ -57,7 +47,7 @@ void onconnect(fd_ctx_t *lctx) {
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
    log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
-   add_to_wheel(ctx);
+   wheel = g_list_prepend(wheel, ctx);
 }
 
 void hexdump(const unsigned char *buf, size_t size) {
@@ -83,7 +73,6 @@ void onsocketread(fd_ctx_t *ctx) {
 
       if(bytes_read == 0) {
          if(ctx->pipeTo) ctx->pipeTo->disconnectAfterWrite = true;
-         close(ctx->fd);
          ondisconnect(ctx);
          break;
       }
@@ -97,7 +86,7 @@ void onsocketread(fd_ctx_t *ctx) {
       }
    }
 
-   if(pipeTo) onsocketwriteok(pipeTo);
+   if(pipeTo) pipeTo->writeRequired = true;
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
@@ -123,7 +112,6 @@ void onsocketwriteok(fd_ctx_t *ctx) {
    }
 
    if(ctx->disconnectAfterWrite) {
-      close(ctx->fd);
       ondisconnect(ctx);
    }
 }
@@ -184,57 +172,85 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       fcgi_process_t *proc = pool_borrow_process(value);
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
-      add_to_wheel(newctx);
+      log_write("Started child process: %s", newctx->name);
+      wheel = g_list_prepend(wheel, newctx);
 
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
       log_write("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
+      newctx->writeRequired = true;
    }
 }
 
 void ondisconnect(fd_ctx_t *ctx) {
-   log_write("[%s] connection closed, removing from interest", ctx->name);
-   epoll_ctl(epollfd, EPOLL_CTL_DEL, ctx->fd, NULL);
-
-   if(ctx->process) {
-      pool_release_process(ctx->process);
-   }
-
-   if(ctx->pipeTo) {
-      ctx->pipeTo->pipeTo = NULL;
-      ctx->pipeTo = NULL;
-   }
-
-   fd_ctx_free(ctx);
+   ctx->toDelete = true;
 }
 
 int main() {
    int listen_sock = create_listening_socket();
-   epollfd = epoll_create( 0xCAFE );
-
-   assert(epollfd != -1);
 
    fd_ctx_t *ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
    fd_ctx_set_name(ctx, "listen_sock");
+   log_open("/tmp/std-fpm.log");
    log_set_echo(true);
    log_write("[%s] server created", ctx->name);
-   add_to_wheel(ctx);
+   wheel = g_list_prepend(wheel, ctx);
 
-   const unsigned int EVENTS_COUNT = 20;
-   struct epoll_event pevents[EVENTS_COUNT];
+   struct timeval timeout;
+   timeout.tv_sec  = 3 * 60;
+   timeout.tv_usec = 0;
 
    while(1) {
-      int event_count = epoll_wait(epollfd, pevents, EVENTS_COUNT, 10000);
-      if(event_count < 0) exit(-1);
+      fd_set read_fds, write_fds;
+      FD_ZERO(&read_fds);
+      FD_ZERO(&write_fds);
 
-      for(int i = 0; i < event_count; i++) {
-         fd_ctx_t *ctx = pevents[i].data.ptr;
-         if(ctx->type == STDFPM_LISTEN_SOCK) {
-            onconnect(ctx);
-            continue;
+      int maxfd = 0;
+
+      for(GList *it = wheel; it != NULL; it = it->next) {
+         fd_ctx_t *ctx = it->data;
+         log_write("Adding %s write=%d", ctx->name, ctx->writeRequired);
+         FD_SET(ctx->fd, &read_fds);
+         if(ctx->writeRequired) FD_SET(ctx->fd, &write_fds);
+         if(ctx->fd > maxfd) maxfd = ctx->fd;
+      }
+
+      int ret = select(maxfd + 1, &read_fds, &write_fds, NULL, &timeout);
+      if(ret < 0) {
+         perror("select");
+         exit(-1);
+      }
+      if(ret == 0) continue;
+
+      for(GList *it = wheel; it != NULL; it = it->next) {
+         fd_ctx_t *ctx = it->data;
+         if(FD_ISSET(ctx->fd, &read_fds)) {
+            ctx->type == STDFPM_LISTEN_SOCK ? onconnect(ctx) : onsocketread(ctx);
          }
-         if(pevents[i].events & EPOLLIN) onsocketread(ctx);
-         if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
-         if(pevents[i].events & EPOLLHUP) ondisconnect(ctx);
+         if(FD_ISSET(ctx->fd, &write_fds)) {
+            onsocketwriteok(ctx);
+         }
+      }
+
+
+      for(GList *it = wheel; it != NULL; it = it->next) {
+         fd_ctx_t *ctx = it->data;
+         if(!ctx->toDelete) continue;
+         log_write("Freeing %08x", ctx);
+         log_write("Freeing %s", ctx->name);
+
+	      if(ctx->process) {
+	         pool_release_process(ctx->process);
+	      }
+	   
+	      if(ctx->pipeTo) {
+	         ctx->pipeTo->pipeTo = NULL;
+	         ctx->pipeTo = NULL;
+	      }
+	   
+         wheel = g_list_delete_link(wheel, it);
+         log_write("[%s] connection closed, removing from interest", ctx->name);
+         close(ctx->fd);
+	      fd_ctx_free(ctx);
       }
    }
 }

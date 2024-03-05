@@ -7,7 +7,7 @@ static bool log_echo = false;
 FILE *f = NULL;
 
 void log_open(const char *path) {
-   f = fopen(path, "w+");
+   f = fopen(path, "w");
 }
 
 void log_set_echo(bool new_value) {
