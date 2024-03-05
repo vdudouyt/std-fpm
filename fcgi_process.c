@@ -20,6 +20,8 @@ fcgi_process_t *fcgi_spawn(const char *path) {
    sprintf(ret->s_un.sun_path, "/tmp/stdfpm-%d.sock", process_count);
    unlink(ret->s_un.sun_path);
 
+   strncpy(ret->filepath, path, sizeof(ret->filepath));
+
    process_count++;
    assert(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) != -1);
    chmod(ret->s_un.sun_path, 0777);
