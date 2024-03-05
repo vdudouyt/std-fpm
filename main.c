@@ -185,25 +185,29 @@ static void stdfpm_process_events(fd_set *read_fds, fd_set *write_fds) {
 }
 
 static void stdfpm_cleanup() {
-   for(GList *it = wheel; it != NULL; it = it->next) {
+   GList *it = wheel;
+   while(it != NULL) {
+      GList *next = it->next;
       fd_ctx_t *ctx = it->data;
-      if(!ctx->eof) continue;
-      if(buf_bytes_remaining(&ctx->outBuf) > 0) continue;
-   
-      if(ctx->process) {
-         pool_release_process(ctx->process);
+
+      if(ctx->eof && buf_bytes_remaining(&ctx->outBuf) == 0) {
+         if(ctx->process) {
+            pool_release_process(ctx->process);
+         }
+
+         if(ctx->pipeTo) {
+            ctx->pipeTo->pipeTo = NULL;
+            ctx->pipeTo = NULL;
+         }
+
+         wheel = g_list_delete_link(wheel, it);
+         log_write("[%s] connection closed, removing from interest", ctx->name);
+         log_write("[%s] connection time elapsed: %d", ctx->name, time(NULL) - ctx->started_at);
+         close(ctx->fd);
+         fd_ctx_free(ctx);
       }
-   
-      if(ctx->pipeTo) {
-         ctx->pipeTo->pipeTo = NULL;
-         ctx->pipeTo = NULL;
-      }
-   
-      wheel = g_list_delete_link(wheel, it);
-      log_write("[%s] connection closed, removing from interest", ctx->name);
-      log_write("[%s] connection time elapsed: %d", ctx->name, time(NULL) - ctx->started_at);
-      close(ctx->fd);
-      fd_ctx_free(ctx);
+
+      it = next;
    }
 }
 
