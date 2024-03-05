@@ -210,12 +210,12 @@ static void stdfpm_cleanup() {
 int main() {
    int listen_sock = create_listening_socket();
 
-   fd_ctx_t *ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
-   fd_ctx_set_name(ctx, "listen_sock");
+   fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
+   fd_ctx_set_name(listen_ctx, "listen_sock");
    log_open("/tmp/std-fpm.log");
    log_set_echo(true);
-   log_write("[%s] server created", ctx->name);
-   wheel = g_list_prepend(wheel, ctx);
+   log_write("[%s] server created", listen_ctx->name);
+   wheel = g_list_prepend(wheel, listen_ctx);
 
    struct timeval timeout;
    timeout.tv_sec  = 3 * 60;
