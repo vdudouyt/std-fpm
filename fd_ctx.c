@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/socket.h>
+#include <time.h>
 
 fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
@@ -14,6 +15,7 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    sprintf(ret->name, "<not set>");
    ret->fd = fd;
    ret->type = type;
+   ret->started_at = time(NULL);
    buf_reset(&ret->outBuf);
    
    strcpy(ret->name, "");

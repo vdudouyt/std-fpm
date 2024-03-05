@@ -60,6 +60,9 @@ void onsocketread(fd_ctx_t *ctx) {
 
    static char buf[4096];
    int bytes_read;
+   if(!buf_ready_write(buf_to_write, 4096)) {
+      log_write("Buf is not ready: %08x", buf_to_write);
+   }
    while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
       log_write("[%s] received %d bytes", ctx->name, bytes_read);
 
@@ -169,6 +172,41 @@ static int stdfpm_prepare_fds(fd_set *read_fds, fd_set *write_fds) {
    return maxfd;
 }
 
+static void stdfpm_process_events(fd_set *read_fds, fd_set *write_fds) {
+   for(GList *it = wheel; it != NULL; it = it->next) {
+      fd_ctx_t *ctx = it->data;
+      if(FD_ISSET(ctx->fd, read_fds)) {
+         ctx->type == STDFPM_LISTEN_SOCK ? onconnect(ctx) : onsocketread(ctx);
+      }
+      if(FD_ISSET(ctx->fd, write_fds)) {
+         onsocketwriteok(ctx);
+      }
+   }
+}
+
+static void stdfpm_cleanup() {
+   for(GList *it = wheel; it != NULL; it = it->next) {
+      fd_ctx_t *ctx = it->data;
+      if(!ctx->eof) continue;
+      if(buf_bytes_remaining(&ctx->outBuf) > 0) continue;
+   
+      if(ctx->process) {
+         pool_release_process(ctx->process);
+      }
+   
+      if(ctx->pipeTo) {
+         ctx->pipeTo->pipeTo = NULL;
+         ctx->pipeTo = NULL;
+      }
+   
+      wheel = g_list_delete_link(wheel, it);
+      log_write("[%s] connection closed, removing from interest", ctx->name);
+      log_write("[%s] connection time elapsed: %d", ctx->name, time(NULL) - ctx->started_at);
+      close(ctx->fd);
+      fd_ctx_free(ctx);
+   }
+}
+
 int main() {
    int listen_sock = create_listening_socket();
 
@@ -193,36 +231,7 @@ int main() {
          exit(-1);
       }
       if(ret == 0) continue;
-
-      for(GList *it = wheel; it != NULL; it = it->next) {
-         fd_ctx_t *ctx = it->data;
-         if(FD_ISSET(ctx->fd, &read_fds)) {
-            ctx->type == STDFPM_LISTEN_SOCK ? onconnect(ctx) : onsocketread(ctx);
-         }
-         if(FD_ISSET(ctx->fd, &write_fds)) {
-            onsocketwriteok(ctx);
-         }
-      }
-
-
-      for(GList *it = wheel; it != NULL; it = it->next) {
-         fd_ctx_t *ctx = it->data;
-         if(!ctx->eof) continue;
-         if(buf_bytes_remaining(&ctx->outBuf) > 0) continue;
-
-	      if(ctx->process) {
-	         pool_release_process(ctx->process);
-	      }
-	   
-	      if(ctx->pipeTo) {
-	         ctx->pipeTo->pipeTo = NULL;
-	         ctx->pipeTo = NULL;
-	      }
-	   
-         wheel = g_list_delete_link(wheel, it);
-         log_write("[%s] connection closed, removing from interest", ctx->name);
-         close(ctx->fd);
-	      fd_ctx_free(ctx);
-      }
+      stdfpm_process_events(&read_fds, &write_fds);
+      stdfpm_cleanup();
    }
 }
