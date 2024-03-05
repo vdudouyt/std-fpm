@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <ctype.h>
 #include <gmodule.h>
 
 #include "fd_ctx.h"
@@ -13,6 +12,7 @@
 #include "fcgitypes.h"
 #include "log.h"
 #include "process_pool.h"
+#include "debug_utils.h"
 
 GList *wheel = NULL;
 
@@ -46,13 +46,6 @@ void onconnect(fd_ctx_t *lctx) {
    ctx->client->params_parser->callback = onfcgiparam;
    log_write("[%s] new connection accepted: %s", lctx->name, ctx->name);
    wheel = g_list_prepend(wheel, ctx);
-}
-
-void hexdump(const unsigned char *buf, size_t size) {
-   for(int i = 0; i < size; i++) {
-      printf("%02x ", buf[i]);;
-   }
-   printf("\n");
 }
 
 void onsocketread(fd_ctx_t *ctx) {
@@ -109,21 +102,6 @@ void onsocketwriteok(fd_ctx_t *ctx) {
          buf_reset(&ctx->outBuf);
       }
    }
-}
-
-static void escape(unsigned char *out, const unsigned char *in, size_t input_length) {
-   unsigned int d = 0;
-   for(unsigned int i = 0; i < input_length; i++) {
-      if(isprint(in[i])) {
-         out[d++] = in[i];
-      } else {
-         out[d++] = '\\';
-         out[d++] = 'x';
-         sprintf(&out[d], "%02x", in[i]);
-         d += 2;
-      }
-   }
-   out[d++] = '\0';
 }
 
 void buf_fcgi_write(buf_t *outBuf, unsigned int requestId, unsigned int type, const char *content, size_t contentLength) {
