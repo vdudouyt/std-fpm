@@ -37,6 +37,6 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
       execv(path, argv);
-      log_write("execv failed");
+      log_write("[%s] execv failed", path);
    }
 }
