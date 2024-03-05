@@ -15,8 +15,12 @@
 #include "process_pool.h"
 
 GList *wheel = NULL;
+
+static void onconnect(fd_ctx_t *lctx);
 static void onsocketread(fd_ctx_t *ctx);
 static void onsocketwriteok(fd_ctx_t *ctx);
+static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
+static void onfcgiparam(const char *key, const char *value, void *userdata);
 
 static int create_listening_socket() {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -35,11 +39,6 @@ static int create_listening_socket() {
 
    return listen_sock;
 }
-
-void onconnect(fd_ctx_t *lctx);
-void onsocketread(fd_ctx_t *ctx);
-void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
-void onfcgiparam(const char *key, const char *value, void *userdata);
 
 void onconnect(fd_ctx_t *lctx) {
    fd_ctx_t *ctx = fd_ctx_client_accept(lctx);
