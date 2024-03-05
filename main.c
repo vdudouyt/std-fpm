@@ -91,7 +91,10 @@ void onsocketwriteok(fd_ctx_t *ctx) {
    log_write("[%s] %d bytes to write", ctx->name, bytes_to_write);
    if(bytes_to_write > 0) {
       hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
-	   int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
+      int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
+      if(bytes_written == -1 && errno == EAGAIN) {
+         return;
+      }
 
       if(bytes_written <= 0) {
          log_write("[%s] write failed, discarding buffer", ctx->name);
