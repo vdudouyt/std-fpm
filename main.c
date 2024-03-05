@@ -36,6 +36,7 @@ static int create_listening_socket() {
    chmod(s_un.sun_path, 0777);
    assert(listen(listen_sock, 1024) != -1);
    fd_setnonblocking(listen_sock);
+   fd_setcloseonexec(listen_sock);
 
    return listen_sock;
 }
@@ -153,6 +154,21 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    }
 }
 
+static int stdfpm_prepare_fds(fd_set *read_fds, fd_set *write_fds) {
+   int maxfd = 0;
+   FD_ZERO(read_fds);
+   FD_ZERO(write_fds);
+
+   for(GList *it = wheel; it != NULL; it = it->next) {
+      fd_ctx_t *ctx = it->data;
+      log_write("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
+      FD_SET(ctx->fd, read_fds);
+      if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, write_fds);
+      if(ctx->fd > maxfd) maxfd = ctx->fd;
+   }
+   return maxfd;
+}
+
 int main() {
    int listen_sock = create_listening_socket();
 
@@ -169,18 +185,7 @@ int main() {
 
    while(1) {
       fd_set read_fds, write_fds;
-      FD_ZERO(&read_fds);
-      FD_ZERO(&write_fds);
-
-      int maxfd = 0;
-
-      for(GList *it = wheel; it != NULL; it = it->next) {
-         fd_ctx_t *ctx = it->data;
-         log_write("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
-         FD_SET(ctx->fd, &read_fds);
-         if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, &write_fds);
-         if(ctx->fd > maxfd) maxfd = ctx->fd;
-      }
+      int maxfd = stdfpm_prepare_fds(&read_fds, &write_fds);
 
       int ret = select(maxfd + 1, &read_fds, &write_fds, NULL, &timeout);
       if(ret < 0) {
