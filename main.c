@@ -235,8 +235,6 @@ int main() {
       for(GList *it = wheel; it != NULL; it = it->next) {
          fd_ctx_t *ctx = it->data;
          if(!ctx->toDelete) continue;
-         log_write("Freeing %08x", ctx);
-         log_write("Freeing %s", ctx->name);
 
 	      if(ctx->process) {
 	         pool_release_process(ctx->process);
