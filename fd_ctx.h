@@ -16,8 +16,7 @@ struct fcgi_client_s {
 struct fd_ctx_s {
    int fd;
    enum { STDFPM_LISTEN_SOCK = 1, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
-   bool toDelete;
-   bool disconnectAfterWrite;
+   bool eof;
    struct fd_ctx_s *pipeTo;
 
    char name[64];

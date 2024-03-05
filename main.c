@@ -38,7 +38,6 @@ static int create_listening_socket() {
 
 void onconnect(fd_ctx_t *lctx);
 void onsocketread(fd_ctx_t *ctx);
-void ondisconnect(fd_ctx_t *ctx);
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 void onfcgiparam(const char *key, const char *value, void *userdata);
 
@@ -72,8 +71,8 @@ void onsocketread(fd_ctx_t *ctx) {
       log_write("[%s] received %d bytes", ctx->name, bytes_read);
 
       if(bytes_read == 0) {
-         if(ctx->pipeTo) ctx->pipeTo->disconnectAfterWrite = true;
-         ondisconnect(ctx);
+         if(ctx->pipeTo) ctx->pipeTo->eof = true;
+         ctx->eof = true;
          break;
       }
 
@@ -107,10 +106,6 @@ void onsocketwriteok(fd_ctx_t *ctx) {
          log_write("[%s] %d bytes written", ctx->name, bytes_written);
          buf_reset(&ctx->outBuf);
       }
-   }
-
-   if(ctx->disconnectAfterWrite) {
-      ondisconnect(ctx);
    }
 }
 
@@ -178,10 +173,6 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    }
 }
 
-void ondisconnect(fd_ctx_t *ctx) {
-   ctx->toDelete = true;
-}
-
 int main() {
    int listen_sock = create_listening_socket();
 
@@ -231,7 +222,8 @@ int main() {
 
       for(GList *it = wheel; it != NULL; it = it->next) {
          fd_ctx_t *ctx = it->data;
-         if(!ctx->toDelete) continue;
+         if(!ctx->eof) continue;
+         if(buf_bytes_remaining(&ctx->outBuf) > 0) continue;
 
 	      if(ctx->process) {
 	         pool_release_process(ctx->process);
