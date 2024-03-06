@@ -218,9 +218,6 @@ int main() {
    DEBUG("[%s] server created", listen_ctx->name);
    wheel = g_list_prepend(wheel, listen_ctx);
 
-   #ifdef DEBUG_LOG
-   DEBUG("One");
-   #endif
    struct timeval timeout;
    timeout.tv_sec  = 60;
    timeout.tv_usec = 0;
