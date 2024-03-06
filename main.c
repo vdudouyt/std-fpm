@@ -212,11 +212,14 @@ int main() {
       fd_set read_fds, write_fds;
       int maxfd = stdfpm_prepare_fds(&read_fds, &write_fds);
 
+      // we don't have that much of idle file descriptors due to the way how FastCGI is working,
+      // so no need of O(1) descriptor polling here
       int ret = select(maxfd + 1, &read_fds, &write_fds, NULL, &timeout);
       if(ret < 0) {
          perror("select");
          exit(-1);
       }
+
       if(ret == 0) continue;
       stdfpm_process_events(&read_fds, &write_fds);
       stdfpm_cleanup();
