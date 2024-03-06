@@ -10,7 +10,7 @@ typedef struct fcgi_client_s fcgi_client_t;
 struct fcgi_client_s {
    fcgi_parser_t *msg_parser;
    fcgi_params_parser_t *params_parser;
-   buf_t inMemoryBuf; // store what came before SCRIPT_FILENAME could be determined
+   buf_t inMemoryBuf; // buffer to write before SCRIPT_FILENAME can be determined
 };
 
 struct fd_ctx_s {
