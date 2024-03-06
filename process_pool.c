@@ -66,6 +66,7 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
       if(pool_connect_process(proc)) {
          break;
       } else {
+         free(proc);
          proc = NULL;
       }
    }
@@ -76,5 +77,11 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
 
 static fcgi_process_t *pool_create_process(const char *path) {
    fcgi_process_t *proc = fcgi_spawn(path);
-   return pool_connect_process(proc) ? proc : NULL;
+   if(!proc) return NULL;
+   if(pool_connect_process(proc)) {
+      return proc;
+   } else {
+      free(proc);
+      return NULL;
+   }
 }

@@ -132,6 +132,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       if(!proc) {
          log_write("[%s] couldn't acquire FastCGI process", ctx->name);
+         buf_reset(&ctx->outBuf);
          ctx->eof = true;
          return;
       }

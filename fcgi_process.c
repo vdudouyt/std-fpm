@@ -41,5 +41,6 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       char *argv[] = { (char*) path, NULL };
       execv(path, argv);
       log_write("[process_pool] failed to start %s: %s", path, strerror(errno));
+      exit(-1);
    }
 }
