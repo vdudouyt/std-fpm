@@ -129,6 +129,13 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       log_write("[%s] got script filename: %s", ctx->name, value);
       fcgi_process_t *proc = pool_borrow_process(value);
+
+      if(!proc) {
+         log_write("[%s] couldn't acquire FastCGI process", ctx->name);
+         ctx->eof = true;
+         return;
+      }
+
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
       log_write("Started child process: %s", newctx->name);
