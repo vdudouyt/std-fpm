@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <errno.h>
 #include "log.h"
 
 static unsigned int process_count = 0;
@@ -39,6 +40,6 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
       execv(path, argv);
-      log_write("[%s] execv failed", path);
+      log_write("[process_pool] failed to start %s: %s", path, strerror(errno));
    }
 }
