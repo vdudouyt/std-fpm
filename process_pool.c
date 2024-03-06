@@ -71,7 +71,7 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
       }
    }
 
-   g_hash_table_insert(process_pool, path, bucket);
+   g_hash_table_insert(process_pool, (char *) path, bucket);
    return proc;
 }
 
