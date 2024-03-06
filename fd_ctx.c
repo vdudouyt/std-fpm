@@ -12,21 +12,25 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    assert(ret);
    memset(ret, 0, sizeof(fd_ctx_t));
 
-   sprintf(ret->name, "<not set>");
+   #ifdef DEBUG_LOG
+   strcpy(ret->name, "<not set>");
+   #endif
+
    ret->fd = fd;
    ret->type = type;
    buf_reset(&ret->outBuf);
    
-   strcpy(ret->name, "");
    ret->client = NULL;
    return ret;
 }
 
 void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...) {
+   #ifdef DEBUG_LOG
    va_list args;
    va_start(args, fmt);
    vsnprintf(this->name, sizeof(this->name), fmt, args);
    va_end(args);
+   #endif
 }
 
 void fd_ctx_free(fd_ctx_t *this) {

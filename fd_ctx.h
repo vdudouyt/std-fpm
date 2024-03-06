@@ -19,7 +19,10 @@ struct fd_ctx_s {
    bool eof;
    struct fd_ctx_s *pipeTo;
 
+   #ifdef DEBUG_LOG
    char name[64];
+   #endif
+
    buf_t outBuf;
    fcgi_client_t *client;
    fcgi_process_t *process;
