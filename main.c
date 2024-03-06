@@ -238,7 +238,7 @@ int main() {
    while(1) {
       if(time(NULL) - last_clean >= 60) {
          last_clean = time(NULL);
-         pool_close_inactive_processes(60);
+         pool_shutdown_inactive_processes(60);
       }
 
       fd_set read_fds, write_fds;

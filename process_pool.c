@@ -88,7 +88,7 @@ static fcgi_process_t *pool_create_process(const char *path) {
 
 static void pool_hash_function(gpointer key, gpointer value, gpointer user_data);
 
-void pool_close_inactive_processes(unsigned int max_idling_time) {
+void pool_shutdown_inactive_processes(unsigned int max_idling_time) {
    g_hash_table_foreach(process_pool, pool_hash_function, &max_idling_time);
 }
 
