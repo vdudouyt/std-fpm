@@ -6,11 +6,12 @@
 #include <assert.h>
 #include <errno.h>
 #include "log.h"
+#include "debug.h"
 
 static unsigned int process_count = 0;
 
 fcgi_process_t *fcgi_spawn(const char *path) {
-   log_write("[fastcgi spawner] spawning new process: %s", path);
+   DEBUG("[fastcgi spawner] spawning new process: %s", path);
 
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    assert(listen_sock != -1);
@@ -25,13 +26,13 @@ fcgi_process_t *fcgi_spawn(const char *path) {
    process_count++;
    assert(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) != -1);
    chmod(ret->s_un.sun_path, 0777);
-   log_write("[fastcgi spawner] Listening...");
+   DEBUG("[fastcgi spawner] Listening...");
    assert(listen(listen_sock, 1024) != -1);
 
    pid_t pid = fork();
    if(pid > 0) {
       close(listen_sock);
-      log_write("[fastcgi spawner] FastCGI process %s is listening at %s", path, ret->s_un.sun_path);
+      DEBUG("[fastcgi spawner] FastCGI process %s is listening at %s", path, ret->s_un.sun_path);
       ret->pid = pid;
       return ret;
    } else {
@@ -39,7 +40,7 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
       execv(path, argv);
-      log_write("[process_pool] failed to start %s: %s", path, strerror(errno));
+      DEBUG("[process_pool] failed to start %s: %s", path, strerror(errno));
       exit(-1);
    }
 }

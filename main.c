@@ -15,6 +15,7 @@
 #include "process_pool.h"
 #include "debug_utils.h"
 #include "fcgi_writer.h"
+#include "debug.h"
 
 GList *wheel = NULL;
 
@@ -47,12 +48,12 @@ void onconnect(fd_ctx_t *listen_ctx) {
    fd_ctx_t *ctx = fd_ctx_client_accept(listen_ctx);
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
-   log_write("[%s] new connection accepted: %s", listen_ctx->name, ctx->name);
+   DEBUG("[%s] new connection accepted: %s", listen_ctx->name, ctx->name);
    wheel = g_list_prepend(wheel, ctx);
 }
 
 void onsocketread(fd_ctx_t *ctx) {
-   log_write("[%s] starting onsocketread()", ctx->name);
+   DEBUG("[%s] starting onsocketread()", ctx->name);
 
    buf_t *buf_to_write = NULL;
    if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
@@ -63,7 +64,7 @@ void onsocketread(fd_ctx_t *ctx) {
    static char buf[4096];
    int bytes_read;
    while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
-      log_write("[%s] received %d bytes", ctx->name, bytes_read);
+      DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
 
       if(bytes_read == 0) {
          if(ctx->pipeTo) ctx->pipeTo->eof = true;
@@ -71,29 +72,34 @@ void onsocketread(fd_ctx_t *ctx) {
          break;
       }
 
+      #ifdef DEBUG_LOG
       hexdump(buf, bytes_read);
+      #endif
       buf_write(buf_to_write, buf, bytes_read);
 
       if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
-         log_write("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
+         DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
          fcgi_parser_write(ctx->client->msg_parser, buf, bytes_read);
       }
    }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
-   log_write("[%s] socket is ready for writing", ctx->name);
+   DEBUG("[%s] socket is ready for writing", ctx->name);
    size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
-   log_write("[%s] %d bytes to write", ctx->name, bytes_to_write);
+   DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
    if(bytes_to_write > 0) {
+      #ifdef DEBUG_LOG
       hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
+      #endif
+
       int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
       if(bytes_written == -1 && errno == EAGAIN) {
          return;
       }
 
       if(bytes_written <= 0) {
-         log_write("[%s] write failed, discarding buffer", ctx->name);
+         DEBUG("[%s] write failed, discarding buffer", ctx->name);
          buf_reset(&ctx->outBuf);
          return;
       }
@@ -101,7 +107,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
       ctx->outBuf.readPos += bytes_written;
 
       if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
-         log_write("[%s] %d bytes written", ctx->name, bytes_written);
+         DEBUG("[%s] %d bytes written", ctx->name, bytes_written);
          buf_reset(&ctx->outBuf);
       }
    }
@@ -110,13 +116,13 @@ void onsocketwriteok(fd_ctx_t *ctx) {
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    fd_ctx_t *ctx = userdata;
 
-   log_write("[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
+   DEBUG("[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
       ctx->name, fcgitype_to_string(hdr->type), hdr->requestId, hdr->contentLength);
 
    if(hdr->contentLength) {
       char escaped_data[4*65536+1];
       escape(escaped_data, data, hdr->contentLength);
-      log_write("[%s] message content: \"%s\"", ctx->name, escaped_data);
+      DEBUG("[%s] message content: \"%s\"", ctx->name, escaped_data);
    }
 
    if(hdr->type == FCGI_PARAMS) {
@@ -127,11 +133,11 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
 void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
-      log_write("[%s] got script filename: %s", ctx->name, value);
+      DEBUG("[%s] got script filename: %s", ctx->name, value);
       fcgi_process_t *proc = pool_borrow_process(value);
 
       if(!proc) {
-         log_write("[%s] couldn't acquire FastCGI process", ctx->name);
+         DEBUG("[%s] couldn't acquire FastCGI process", ctx->name);
          buf_reset(&ctx->outBuf);
          ctx->eof = true;
          return;
@@ -139,11 +145,11 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
-      log_write("Started child process: %s", newctx->name);
+      DEBUG("Started child process: %s", newctx->name);
       wheel = g_list_prepend(wheel, newctx);
 
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
-      log_write("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
+      DEBUG("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
    }
 }
 
@@ -154,7 +160,7 @@ static int stdfpm_prepare_fds(fd_set *read_fds, fd_set *write_fds) {
 
    for(GList *it = wheel; it != NULL; it = it->next) {
       fd_ctx_t *ctx = it->data;
-      log_write("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
+      DEBUG("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
       FD_SET(ctx->fd, read_fds);
       if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, write_fds);
       if(ctx->fd > maxfd) maxfd = ctx->fd;
@@ -191,7 +197,7 @@ static void stdfpm_cleanup() {
          }
 
          wheel = g_list_delete_link(wheel, it);
-         log_write("[%s] connection closed, removing from interest", ctx->name);
+         DEBUG("[%s] connection closed, removing from interest", ctx->name);
          close(ctx->fd);
          fd_ctx_free(ctx);
       }
@@ -209,9 +215,12 @@ int main() {
    fd_ctx_set_name(listen_ctx, "listen_sock");
    log_open("/tmp/std-fpm.log");
    log_set_echo(true);
-   log_write("[%s] server created", listen_ctx->name);
+   DEBUG("[%s] server created", listen_ctx->name);
    wheel = g_list_prepend(wheel, listen_ctx);
 
+   #ifdef DEBUG_LOG
+   DEBUG("One");
+   #endif
    struct timeval timeout;
    timeout.tv_sec  = 60;
    timeout.tv_usec = 0;

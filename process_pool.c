@@ -7,6 +7,7 @@
 #include <gmodule.h>
 #include "fdutils.h"
 #include "log.h"
+#include "debug.h"
 #include "process_pool.h"
 #include "fcgi_process.h"
 
@@ -34,7 +35,7 @@ fcgi_process_t *pool_borrow_process(const char *path) {
 }
 
 void pool_release_process(fcgi_process_t *proc) {
-   log_write("[process pool] Releasing process %d to bucket %s", proc->pid, proc->filepath);
+   DEBUG("[process pool] Releasing process %d to bucket %s", proc->pid, proc->filepath);
    GList *bucket = g_hash_table_lookup(process_pool, proc->filepath);
    bucket = g_list_prepend(bucket, proc);
    g_hash_table_insert(process_pool, proc->filepath, bucket);
@@ -47,7 +48,7 @@ static bool pool_connect_process(fcgi_process_t *proc) {
    if(connect(proc->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) return false;
    fd_setnonblocking(proc->fd);
    fd_setcloseonexec(proc->fd);
-   log_write("[process pool] opened connection to %s", proc->s_un.sun_path);
+   DEBUG("[process pool] opened connection to %s", proc->s_un.sun_path);
    return true;
 }
 
@@ -102,7 +103,7 @@ static void pool_hash_function(gpointer key, gpointer value, gpointer user_data)
       GList *next = it->next;
       fcgi_process_t *proc = it->data;
       if(curtime - proc->last_used >= max_idling_time) {
-         log_write("[process pool] removing idling process: %s", key);
+         DEBUG("[process pool] removing idling process: %s", key);
          kill(proc->pid, SIGTERM);
          free(proc);
          bucket = g_list_delete_link(bucket, it);
