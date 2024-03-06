@@ -213,10 +213,18 @@ int main() {
    wheel = g_list_prepend(wheel, listen_ctx);
 
    struct timeval timeout;
-   timeout.tv_sec  = 3 * 60;
+   timeout.tv_sec  = 60;
    timeout.tv_usec = 0;
 
+   pool_init();
+   time_t last_clean = time(NULL);
+
    while(1) {
+      if(time(NULL) - last_clean >= 60) {
+         last_clean = time(NULL);
+         pool_close_inactive_processes(60);
+      }
+
       fd_set read_fds, write_fds;
       int maxfd = stdfpm_prepare_fds(&read_fds, &write_fds);
 
