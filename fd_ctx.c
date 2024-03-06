@@ -1,15 +1,17 @@
 #include "fd_ctx.h"
 #include "fdutils.h"
+#include "log.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <sys/socket.h>
 #include <time.h>
 
+#define RETURN_ERROR(msg) { log_write(msg); return NULL; }
+
 fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
-   assert(ret);
+   if(!ret) RETURN_ERROR("[fd_ctx] malloc failed");
    memset(ret, 0, sizeof(fd_ctx_t));
 
    #ifdef DEBUG_LOG
@@ -46,7 +48,7 @@ fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener) {
    struct sockaddr_un client_sockaddr;
    int len = sizeof(client_sockaddr);
    int client_sock = accept(listener->fd, (struct sockaddr *) &client_sockaddr, &len);
-   assert(client_sock != -1);
+   if(client_sock == -1) RETURN_ERROR("[fd_ctx] failed while accepting socket");
    fd_setnonblocking(client_sock);
    fd_setcloseonexec(client_sock);
    return fd_new_client_ctx(client_sock);

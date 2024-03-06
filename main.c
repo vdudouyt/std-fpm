@@ -3,7 +3,6 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <gmodule.h>
@@ -25,9 +24,11 @@ static void onsocketwriteok(fd_ctx_t *ctx);
 static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 static void onfcgiparam(const char *key, const char *value, void *userdata);
 
+#define RETURN_ERROR(msg) { perror(msg); exit(-1); }
+
 static int create_listening_socket() {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-   assert(listen_sock != -1);
+   if(listen_sock == -1) RETURN_ERROR("[main] couldn't create a listener socket");
 
    static char sock_path[] = "/tmp/std-fpm.sock";
    struct sockaddr_un s_un;
@@ -35,9 +36,15 @@ static int create_listening_socket() {
    strcpy(s_un.sun_path, sock_path);
    unlink(s_un.sun_path);
 
-   assert(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) != -1);
+   if(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
+      RETURN_ERROR("[main] failed to bind a unix socket");
+   }
+
    chmod(s_un.sun_path, 0777);
-   assert(listen(listen_sock, 1024) != -1);
+   if(listen(listen_sock, 1024) == -1) {
+      RETURN_ERROR("[main] failed to listen a unix socket");
+   }
+
    fd_setnonblocking(listen_sock);
    fd_setcloseonexec(listen_sock);
 
@@ -46,6 +53,7 @@ static int create_listening_socket() {
 
 void onconnect(fd_ctx_t *listen_ctx) {
    fd_ctx_t *ctx = fd_ctx_client_accept(listen_ctx);
+   if(!ctx) return;
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
    DEBUG("[%s] new connection accepted: %s", listen_ctx->name, ctx->name);
@@ -209,12 +217,14 @@ static void stdfpm_cleanup() {
 int main() {
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
-   int listen_sock = create_listening_socket();
-
-   fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
-   fd_ctx_set_name(listen_ctx, "listen_sock");
    log_open("/tmp/std-fpm.log");
    log_set_echo(true);
+
+   int listen_sock = create_listening_socket();
+   fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
+   if(!listen_ctx) exit(-1);
+
+   fd_ctx_set_name(listen_ctx, "listen_sock");
    DEBUG("[%s] server created", listen_ctx->name);
    wheel = g_list_prepend(wheel, listen_ctx);
 

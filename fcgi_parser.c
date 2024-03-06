@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <assert.h>
 #include "fcgi_parser.h"
 
 #define BE16(a, b) (((a) << 8) | (b))
