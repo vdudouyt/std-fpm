@@ -48,7 +48,10 @@ void pool_release_process(fcgi_process_t *proc) {
 static bool pool_connect_process(fcgi_process_t *proc) {
    proc->fd = socket(AF_UNIX, SOCK_STREAM, 0);
    if(proc->fd == -1) return false;
-   if(connect(proc->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) return false;
+   if(connect(proc->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
+      close(proc->fd);
+      return false;
+   }
    fd_setnonblocking(proc->fd);
    fd_setcloseonexec(proc->fd);
    DEBUG("[process pool] opened connection to %s", proc->s_un.sun_path);
