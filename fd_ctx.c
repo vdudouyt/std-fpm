@@ -57,8 +57,14 @@ fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener) {
 fd_ctx_t *fd_new_client_ctx(int fd) {
    static unsigned int ctr = 1;
    fd_ctx_t *ret = fd_ctx_new(fd, STDFPM_FCGI_CLIENT);
+   if(!ret) {
+      RETURN_ERROR("[fd_new_client_ctx] failed to create fd_ctx");
+   }
    fd_ctx_set_name(ret, "client_%d", ctr++);
    ret->client = malloc(sizeof(fcgi_client_t));
+   if(!ret->client) {
+      RETURN_ERROR("[fd_new_client_ctx] fcgi_client malloc failed");
+   }
    memset(ret->client, 0, sizeof(fcgi_client_t));
 
    ret->client->msg_parser = fcgi_parser_new();
@@ -71,6 +77,9 @@ fd_ctx_t *fd_new_client_ctx(int fd) {
 
 fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc) {
    fd_ctx_t *ret = fd_ctx_new(proc->fd, STDFPM_FCGI_PROCESS);
+   if(!ret) {
+      RETURN_ERROR("[fd_new_process_ctx] failed to create fd_ctx");
+   }
    ret->process = proc;
 
    static unsigned int ctr = 1;
