@@ -31,8 +31,11 @@ fcgi_params_parser_t *fcgi_params_parser_new(unsigned int buf_size) {
    }
 
    fcgi_params_parser_t *ret = malloc(sizeof(fcgi_params_parser_t));
+   if(!ret) return NULL;
    memset(ret, 0, sizeof(fcgi_params_parser_t));
    ret->buf = malloc(buf_size);
+   if(!ret->buf) return NULL;
+
    ret->buf_size = buf_size;
    memset(ret->buf, 0, buf_size);
    return ret;

@@ -68,9 +68,12 @@ fd_ctx_t *fd_new_client_ctx(int fd) {
    memset(ret->client, 0, sizeof(fcgi_client_t));
 
    ret->client->msg_parser = fcgi_parser_new();
-   ret->client->msg_parser->userdata = ret;
-
    ret->client->params_parser = fcgi_params_parser_new(4096);
+   if(!ret->client->msg_parser || !ret->client->params_parser) {
+      RETURN_ERROR("[fd_new_client_ctx] FastCGI parsers malloc failed");
+   }
+
+   ret->client->msg_parser->userdata = ret;
    ret->client->params_parser->userdata = ret;
    return ret;
 }

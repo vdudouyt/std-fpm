@@ -12,6 +12,7 @@ enum { STATUS_READ_HEADER, STATUS_READ_MESSAGE };
 
 fcgi_parser_t *fcgi_parser_new() {
    fcgi_parser_t *ret = malloc(sizeof(fcgi_parser_t));
+   if(!ret) return NULL;
    memset(ret, 0, sizeof(fcgi_parser_t));
    return ret;
 }
