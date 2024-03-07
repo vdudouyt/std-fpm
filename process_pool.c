@@ -10,6 +10,8 @@
 #include "process_pool.h"
 #include "fcgi_process.h"
 
+#define RETURN_ERROR(msg) { log_write(msg); return NULL; }
+
 static GHashTable *process_pool = NULL;
 static bool pool_connect_process(fcgi_process_t *proc);
 static fcgi_process_t *pool_borrow_existing_process(const char *path);
@@ -23,7 +25,9 @@ void pool_init() {
 
 fcgi_process_t *pool_borrow_process(const char *path) {
    if(!g_hash_table_contains(process_pool, path)) {
-      g_hash_table_insert(process_pool, strdup(path), NULL);
+      char *newkey = strdup(path);
+      if(!newkey) RETURN_ERROR("[process pool] strdup failed");
+      g_hash_table_insert(process_pool, newkey, NULL);
    }
 
    fcgi_process_t *proc = pool_borrow_existing_process(path);
