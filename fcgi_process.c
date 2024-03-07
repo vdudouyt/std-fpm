@@ -56,7 +56,7 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       DEBUG("[fastcgi spawner] FastCGI process %s is listening at %s", path, ret->s_un.sun_path);
       ret->pid = pid;
       return ret;
-   } else {
+   } else if(pid == 0) {
       free(ret);
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
@@ -82,6 +82,10 @@ fcgi_process_t *fcgi_spawn(const char *path) {
       close(STDIN_FILENO);
       unlink(ret->s_un.sun_path);
       exit(-1);
+   } else {
+      log_write("[fastcgi spawner] fork failed: %s", strerror(errno));
+      close(listen_sock);
+      return NULL;
    }
 }
 
