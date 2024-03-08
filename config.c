@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <gmodule.h>
+#include <unistd.h>
 #include <pwd.h>
 #include <grp.h>
 
@@ -32,24 +33,28 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
       SHOW_ERROR_AND_EXIT("Failed to open %s: %s", cfgpath, error->message);
    }
 
-   const char* user = g_key_file_get_string(localini, "global", "user", &error);
-   if(!user) SHOW_ERROR_AND_EXIT("[config] user not specified");
+   const char* user = g_key_file_get_string(localini, "global", "user", NULL);
+   if(!user && getuid() == 0) SHOW_ERROR_AND_EXIT("[config] user not specified");
 
-   const char* group = g_key_file_get_string(localini, "global", "group", &error);
-   if(!user) SHOW_ERROR_AND_EXIT("[config] group not specified");
+   const char* group = g_key_file_get_string(localini, "global", "group", NULL);
+   if(!group && getgid() == 0) SHOW_ERROR_AND_EXIT("[config] group not specified");
 
-   const struct passwd *pwd = getpwnam(user);
-   if(!pwd) SHOW_ERROR_AND_EXIT("[config] user not found: %s", user);
+   if(user) {
+      const struct passwd *pwd = getpwnam(user);
+      if(!pwd) SHOW_ERROR_AND_EXIT("[config] user not found: %s", user);
+      cfg->uid = pwd->pw_uid;
+   }
 
-   const struct group *grp = getgrnam(group);
-   if(!grp) SHOW_ERROR_AND_EXIT("[config] group not found: %s", group);
+   if(group) {
+      const struct group *grp = getgrnam(group);
+      if(!grp) SHOW_ERROR_AND_EXIT("[config] group not found: %s", group);
+      cfg->gid = grp->gr_gid;
+   }
 
    cfg->pid       = g_key_file_get_string(localini, "global", "pid", &error);
    cfg->error_log = g_key_file_get_string(localini, "global", "error_log", &error);
    cfg->listen    = g_key_file_get_string(localini, "global", "listen", &error);
    cfg->pool      = g_key_file_get_string(localini, "global", "pool", &error);
-   cfg->uid       = pwd->pw_uid;
-   cfg->gid       = grp->gr_gid;
 
    if(!cfg->listen) SHOW_ERROR_AND_EXIT("[config] listen not specified");
    if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");
