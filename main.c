@@ -34,7 +34,10 @@ static int stdfpm_create_listening_socket(const char *sock_path) {
    struct sockaddr_un s_un;
    s_un.sun_family = AF_UNIX;
    strcpy(s_un.sun_path, sock_path);
-   unlink(s_un.sun_path);
+
+   if(connect(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
+      unlink(s_un.sun_path); // Socket is in use, prepare for binding
+   }
 
    if(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
       RETURN_ERROR("[main] failed to bind a unix socket");
