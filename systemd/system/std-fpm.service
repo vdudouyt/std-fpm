@@ -1,0 +1,10 @@
+[Unit]
+Description=A language-agnostic FastCGI process manager
+After=network.target
+User=root
+
+[Service] 
+ExecStart=/usr/sbin/std-fpm -f -c /etc/std-fpm.conf
+ 
+[Install] 
+WantedBy=multi-user.target
