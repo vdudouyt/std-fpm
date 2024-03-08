@@ -1,0 +1,3 @@
+#!/bin/bash
+systemctl stop std-fpm
+systemctl disable std-fpm.service
