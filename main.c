@@ -230,9 +230,7 @@ int main(int argc, char **argv) {
 
    if(!cfg->foreground) {
       log_set_echo(false);
-      log_write("daemonize");
       if(daemon(0, 0) != 0) RETURN_ERROR("Couldnt' daemonize");
-      log_write("ok");
    }
 
    signal(SIGPIPE, SIG_IGN);
