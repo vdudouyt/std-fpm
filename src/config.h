@@ -6,7 +6,6 @@ typedef struct {
    uid_t uid;
    gid_t gid;
 
-   const char *pid;
    const char *error_log;
    const char *listen;
    const char *pool;

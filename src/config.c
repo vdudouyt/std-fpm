@@ -51,7 +51,6 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
       cfg->gid = grp->gr_gid;
    }
 
-   cfg->pid       = g_key_file_get_string(localini, "global", "pid", &error);
    cfg->error_log = g_key_file_get_string(localini, "global", "error_log", &error);
    cfg->listen    = g_key_file_get_string(localini, "global", "listen", &error);
    cfg->pool      = g_key_file_get_string(localini, "global", "pool", &error);
