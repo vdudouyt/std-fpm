@@ -4,7 +4,7 @@ A language-agnostic FastCGI process manager implementation
 
 ** Webserver configuration examples **
 
-Nginx
+Nginx (*ngx_http_fastcgi_module*)
 ```nohighlight
 location ~ \.fcgi$ {
    include snippets/fastcgi-php.conf;
@@ -12,10 +12,12 @@ location ~ \.fcgi$ {
 }
 ```
 
-Apache
+Apache (*mod_proxy_fcgi*)
 ```nohighlight
 $ a2enmod proxy_fcgi
+```
 
+```nohighlight
 <FilesMatch \.fcgi$>
      SetHandler "proxy:unix:/run/std-fpm/std-fpm.sock|fcgi://localhost/"
 </FilesMatch>
