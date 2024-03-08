@@ -56,7 +56,7 @@ void fcgi_params_parser_write(fcgi_params_parser_t *this, const char *input, uns
 
       if(this->status <= STATUS_READ_VALUE_LENGTH && (got_uint8 || got_uint32)) {
          int *out = this->status == STATUS_READ_VALUE_LENGTH ? &this->value_length : &this->key_length;
-         *out = got_uint32 ? BE32(this->buf[0], this->buf[1], this->buf[2], this->buf[3]) & 0x7F : this->buf[0];
+         *out = got_uint32 ? BE32(this->buf[0] & 0x7F, this->buf[1], this->buf[2], this->buf[3]) : this->buf[0];
          this->status++;
          this->pos = 0;
       } 
