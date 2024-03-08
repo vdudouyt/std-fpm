@@ -15,6 +15,7 @@
 #include "debug_utils.h"
 #include "fcgi_writer.h"
 #include "debug.h"
+#include "config.h"
 
 GList *wheel = NULL;
 
@@ -214,11 +215,13 @@ static void stdfpm_cleanup() {
    }
 }
 
-int main() {
+int main(int argc, char **argv) {
+   log_set_echo(true);
+   stdfpm_config_t *cfg = stdfpm_read_config(argc, argv);
+
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
    log_open("/tmp/std-fpm.log");
-   log_set_echo(true);
 
    int listen_sock = create_listening_socket();
    fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
