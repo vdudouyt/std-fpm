@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/prctl.h>
+#include <signal.h>
 #include <errno.h>
 #include "log.h"
 #include "buf.h"
@@ -57,6 +59,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       free(ret);
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
+      prctl(PR_SET_PDEATHSIG, SIGHUP); // terminate if parent process exits
       execv(path, argv);
 
       // execve failed, send error response to std-fpm worker and terminate
