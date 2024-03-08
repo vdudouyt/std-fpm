@@ -9,6 +9,7 @@ typedef struct {
    const char *error_log;
    const char *listen;
    const char *pool;
+   char **extensions;
 
    bool foreground;
 } stdfpm_config_t;

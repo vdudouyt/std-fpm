@@ -29,6 +29,7 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
 
    GError *error = NULL;
    GKeyFile *localini = g_key_file_new();
+
    if (g_key_file_load_from_file(localini, cfgpath, G_KEY_FILE_KEEP_COMMENTS, &error) == FALSE) {
       SHOW_ERROR_AND_EXIT("Failed to open %s: %s", cfgpath, error->message);
    }
@@ -51,9 +52,10 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
       cfg->gid = grp->gr_gid;
    }
 
-   cfg->error_log = g_key_file_get_string(localini, "global", "error_log", &error);
-   cfg->listen    = g_key_file_get_string(localini, "global", "listen", &error);
-   cfg->pool      = g_key_file_get_string(localini, "global", "pool", &error);
+   cfg->error_log    = g_key_file_get_string(localini, "global", "error_log", &error);
+   cfg->listen       = g_key_file_get_string(localini, "global", "listen", &error);
+   cfg->pool         = g_key_file_get_string(localini, "global", "pool", &error);
+   cfg->extensions   = g_key_file_get_string_list(localini, "global", "extensions", NULL, NULL);
 
    if(!cfg->listen) SHOW_ERROR_AND_EXIT("[config] listen not specified");
    if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");

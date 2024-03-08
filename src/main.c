@@ -18,12 +18,14 @@
 #include "config.h"
 
 GList *wheel = NULL;
+stdfpm_config_t *cfg = NULL;
 
 static void onconnect(fd_ctx_t *lctx);
 static void onsocketread(fd_ctx_t *ctx);
 static void onsocketwriteok(fd_ctx_t *ctx);
 static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 static void onfcgiparam(const char *key, const char *value, void *userdata);
+static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size);
 
 #define RETURN_ERROR(msg) { perror(msg); exit(-1); }
 
@@ -141,6 +143,22 @@ void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
    }
 }
 
+bool stdfpm_allowed_extension(const char *filename, char **extensions) {
+   if(!extensions) {
+      return false;
+   }
+
+   char *ext = strrchr(filename, '.');
+   if(!ext) return false;
+
+   unsigned int i = 0;
+   for(char **s = extensions; s[i]; i++) {
+      if(!strcmp(ext, s[i])) return true;
+   }
+
+   return false;
+}
+
 void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
@@ -149,6 +167,12 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       // Apache
       const char pre[] = "proxy:fcgi://localhost/";
       if(!strncmp(pre, value, strlen(pre))) value = &value[strlen(pre)];
+
+      if(!stdfpm_allowed_extension(value, cfg->extensions)) {
+         char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
+         fcgi_send_response(ctx, response, strlen(response));
+         return;
+      }
 
       fcgi_process_t *proc = pool_borrow_process(value);
 
@@ -222,9 +246,19 @@ static void stdfpm_cleanup() {
    }
 }
 
+static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
+   log_write("fcgi_send_response");
+   buf_reset(&ctx->outBuf);
+   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, response, size);
+   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, "", 0);
+   fcgi_write_buf(&ctx->outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+   if(ctx->pipeTo) ctx->pipeTo->eof = true;
+   ctx->eof = true;
+}
+
 int main(int argc, char **argv) {
    log_set_echo(true);
-   stdfpm_config_t *cfg = stdfpm_read_config(argc, argv);
+   cfg = stdfpm_read_config(argc, argv);
    if(!cfg) RETURN_ERROR("Read config failed");
    if(cfg->gid > 0 && setgid(cfg->gid) == -1) RETURN_ERROR("Couldn't set process gid");
    if(cfg->uid > 0 && setuid(cfg->uid) == -1) RETURN_ERROR("Couldn't set process uid");
