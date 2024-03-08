@@ -145,6 +145,11 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    fd_ctx_t *ctx = userdata;
    if(!strcmp(key, "SCRIPT_FILENAME")) {
       DEBUG("[%s] got script filename: %s", ctx->name, value);
+
+      // Apache
+      const char pre[] = "proxy:fcgi://localhost/";
+      if(!strncmp(pre, value, strlen(pre))) value = &value[strlen(pre)];
+
       fcgi_process_t *proc = pool_borrow_process(value);
 
       if(!proc) {
