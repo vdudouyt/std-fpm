@@ -12,15 +12,22 @@
 
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
+static char *pool_path = NULL;
 static GHashTable *process_pool = NULL;
+static unsigned int startup_counter = 0;
+
 static bool pool_connect_process(fcgi_process_t *proc);
 static fcgi_process_t *pool_borrow_existing_process(const char *path);
 static fcgi_process_t *pool_create_process(const char *path);
 
-void pool_init() {
-   if(!process_pool) {
-      process_pool = g_hash_table_new(g_str_hash, g_str_equal);
-   }
+bool pool_init(const char *path) {
+   process_pool = g_hash_table_new(g_str_hash, g_str_equal);
+   if(!process_pool) return false;
+
+   pool_path = strdup(path);
+   if(!pool_path) return false;
+
+   return true;
 }
 
 fcgi_process_t *pool_borrow_process(const char *path) {
@@ -83,7 +90,11 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
 }
 
 static fcgi_process_t *pool_create_process(const char *path) {
-   fcgi_process_t *proc = fcgi_spawn(path);
+   char socket_path[4096];
+   startup_counter++;
+   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, startup_counter);
+
+   fcgi_process_t *proc = fcgi_spawn(socket_path, path);
    if(!proc) return NULL;
    if(pool_connect_process(proc)) {
       return proc;

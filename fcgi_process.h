@@ -13,4 +13,4 @@ struct fcgi_process_s {
    time_t last_used;
 };
 
-fcgi_process_t *fcgi_spawn(const char *path);
+fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path);

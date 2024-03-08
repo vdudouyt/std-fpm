@@ -51,5 +51,8 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    cfg->uid       = pwd->pw_uid;
    cfg->gid       = grp->gr_gid;
 
+   if(!cfg->listen) SHOW_ERROR_AND_EXIT("[config] listen not specified");
+   if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");
+
    return cfg;
 }

@@ -10,12 +10,11 @@
 #include "fcgitypes.h"
 #include "debug.h"
 
-static unsigned int process_count = 0;
 static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
 
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
-fcgi_process_t *fcgi_spawn(const char *path) {
+fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    DEBUG("[fastcgi spawner] spawning new process: %s", path);
 
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -32,12 +31,10 @@ fcgi_process_t *fcgi_spawn(const char *path) {
 
    memset(ret, sizeof(fcgi_process_t), 0);
    ret->s_un.sun_family = AF_UNIX;
-   sprintf(ret->s_un.sun_path, "/tmp/stdfpm-%d.sock", process_count);
+   strncpy(ret->s_un.sun_path, socketpath, sizeof(ret->s_un.sun_path));
    unlink(ret->s_un.sun_path);
-
    strncpy(ret->filepath, path, sizeof(ret->filepath));
 
-   process_count++;
    if(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) == -1) {
       close(listen_sock);
       RETURN_ERROR("[process_pool] failed to bind a unix socket");

@@ -27,11 +27,10 @@ static void onfcgiparam(const char *key, const char *value, void *userdata);
 
 #define RETURN_ERROR(msg) { perror(msg); exit(-1); }
 
-static int create_listening_socket() {
+static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    if(listen_sock == -1) RETURN_ERROR("[main] couldn't create a listener socket");
 
-   static char sock_path[] = "/tmp/std-fpm.sock";
    struct sockaddr_un s_un;
    s_un.sun_family = AF_UNIX;
    strcpy(s_un.sun_path, sock_path);
@@ -218,12 +217,24 @@ static void stdfpm_cleanup() {
 int main(int argc, char **argv) {
    log_set_echo(true);
    stdfpm_config_t *cfg = stdfpm_read_config(argc, argv);
+   if(!cfg) RETURN_ERROR("Read config failed");
+   if(cfg->gid > 0 && setgid(cfg->gid) == -1) RETURN_ERROR("Couldn't set process gid");
+   if(cfg->uid > 0 && setuid(cfg->uid) == -1) RETURN_ERROR("Couldn't set process uid");
+   if(!log_open(cfg->error_log)) RETURN_ERROR("Couldn't open log");
+   if(!pool_init(cfg->pool)) RETURN_ERROR("Pool initialization failed");
+
+   int listen_sock = stdfpm_create_listening_socket(cfg->listen);
+
+   if(!cfg->foreground) {
+      log_set_echo(false);
+      log_write("daemonize");
+      if(daemon(0, 0) != 0) RETURN_ERROR("Couldnt' daemonize");
+      log_write("ok");
+   }
 
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
-   log_open("/tmp/std-fpm.log");
 
-   int listen_sock = create_listening_socket();
    fd_ctx_t *listen_ctx = fd_ctx_new(listen_sock, STDFPM_LISTEN_SOCK);
    if(!listen_ctx) exit(-1);
 
@@ -235,7 +246,6 @@ int main(int argc, char **argv) {
    timeout.tv_sec  = 60;
    timeout.tv_usec = 0;
 
-   pool_init();
    time_t last_clean = time(NULL);
 
    while(1) {
