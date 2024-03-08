@@ -6,6 +6,7 @@
 #include <sys/prctl.h>
 #include <signal.h>
 #include <errno.h>
+#include <libgen.h>
 #include "log.h"
 #include "buf.h"
 #include "fcgi_writer.h"
@@ -57,6 +58,12 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       return ret;
    } else if(pid == 0) {
       free(ret);
+
+      char *pathname_copy = strdup(path);
+      char *directory_path = pathname_copy ? dirname(pathname_copy) : NULL;
+      if(directory_path) chdir(directory_path);
+      free(directory_path);
+
       dup2(listen_sock, STDIN_FILENO);
       char *argv[] = { (char*) path, NULL };
       prctl(PR_SET_PDEATHSIG, SIGHUP); // terminate if parent process exits
