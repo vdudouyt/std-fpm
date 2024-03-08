@@ -8,7 +8,20 @@ pkg_search_module(GLIB REQUIRED glib-3.0)
 include_directories(${GLIB_INCLUDE_DIRS})
 link_directories(${GLIB_LIBRARY_DIRS})
 
-set(SOURCE_FILES main.c fcgi_params_parser.c fcgi_parser.c fcgitypes.c log.c buf.c process_pool.c fcgi_process.c fd_ctx.c fdutils.c debug_utils.c fcgi_writer.c config.c)
+set(SOURCE_FILES 
+   src/main.c
+   src/fcgi_params_parser.c
+   src/fcgi_parser.c
+   src/fcgitypes.c
+   src/log.c
+   src/buf.c
+   src/process_pool.c
+   src/fcgi_process.c
+   src/fd_ctx.c
+   src/fdutils.c
+   src/debug_utils.c
+   src/fcgi_writer.c
+   src/config.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
