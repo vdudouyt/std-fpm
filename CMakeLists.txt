@@ -31,3 +31,6 @@ add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER})
 target_link_libraries(std-fpm ${GLIB_LIBRARIES})
+
+set(CMAKE_INSTALL_PREFIX "")
+install(TARGETS std-fpm DESTINATION usr/sbin/)

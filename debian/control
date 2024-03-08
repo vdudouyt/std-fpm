@@ -1,0 +1,13 @@
+Source: std-fpm
+Section: httpd
+Priority: optional
+Maintainer: Valentin Dudouyt <valentin.dudouyt@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://github.com/vdudouyt/std-fpm
+Rules-Requires-Root: no
+
+Package: std-fpm
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A language-agnostic FastCGI process manager
