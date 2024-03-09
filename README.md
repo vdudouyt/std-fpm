@@ -22,3 +22,9 @@ $ a2enmod proxy_fcgi
      SetHandler "proxy:unix:/run/std-fpm/std-fpm.sock|fcgi://localhost/"
 </FilesMatch>
 ```
+
+** Build packages **
+```nohighlight
+$ fakeroot dpkg-buildpackage -nc    # .deb
+$ rpmbuild -bb redhat/std-fpm.spec  # .rpm
+```
