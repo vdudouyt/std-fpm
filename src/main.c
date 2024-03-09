@@ -251,7 +251,7 @@ static void stdfpm_cleanup() {
 }
 
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
-   log_write("fcgi_send_response");
+   DEBUG("fcgi_send_response");
    buf_reset(&ctx->outBuf);
    fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, response, size);
    fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, "", 0);
