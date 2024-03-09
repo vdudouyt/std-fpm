@@ -32,7 +32,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       RETURN_ERROR("[process pool] malloc failed");
    }
 
-   memset(ret, sizeof(fcgi_process_t), 0);
+   memset(ret, 0, sizeof(fcgi_process_t));
    ret->s_un.sun_family = AF_UNIX;
    strncpy(ret->s_un.sun_path, socketpath, sizeof(ret->s_un.sun_path));
    unlink(ret->s_un.sun_path);
