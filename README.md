@@ -7,7 +7,7 @@ A language-agnostic FastCGI process manager implementation
 Nginx (*ngx_http_fastcgi_module*)
 ```nohighlight
 location ~ \.fcgi$ {
-   include snippets/fastcgi-php.conf;
+   include fastcgi.conf;
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
 }
 ```
