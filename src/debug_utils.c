@@ -1,13 +1,13 @@
 #include "debug_utils.h"
 
-void hexdump(const unsigned char *buf, size_t size) {
+void hexdump(const char *buf, size_t size) {
    for(int i = 0; i < size; i++) {
-      printf("%02x ", buf[i]);;
+      printf("%02x ", (unsigned char) buf[i]);
    }
    printf("\n");
 }
 
-void escape(unsigned char *out, const unsigned char *in, size_t input_length) {
+void escape(char *out, const char *in, size_t input_length) {
    unsigned int d = 0;
    for(unsigned int i = 0; i < input_length; i++) {
       if(isprint(in[i])) {
@@ -15,7 +15,7 @@ void escape(unsigned char *out, const unsigned char *in, size_t input_length) {
       } else {
          out[d++] = '\\';
          out[d++] = 'x';
-         sprintf(&out[d], "%02x", in[i]);
+         sprintf(&out[d], "%02x", (unsigned char) in[i]);
          d += 2;
       }
    }

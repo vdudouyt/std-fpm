@@ -27,7 +27,7 @@ if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
 endif(DEBUG_LOG)
 
-add_compile_options(-std=gnu99)
+add_compile_options(-std=gnu99 -Wpointer-sign)
 add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER})

@@ -98,7 +98,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
 
 static void fcgi_serve_response(int listen_sock, const char *response, size_t size) {
    struct sockaddr_un client_sockaddr;
-   int len = sizeof(client_sockaddr);
+   unsigned int len = sizeof(client_sockaddr);
 
    int client_sock = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);
    DEBUG("Accepted client sock: sck%d", client_sock);

@@ -36,7 +36,7 @@ void fcgi_parser_write(fcgi_parser_t *this, const uint8_t *input, unsigned int l
       if(this->status == STATUS_READ_MESSAGE && this->pos >= (this->hdr.contentLength + this->hdr.paddingLength)) {
          this->pos = 0;
          this->status = STATUS_READ_HEADER;
-         if(this->callback) this->callback(&this->hdr, this->buf, this->userdata);
+         if(this->callback) this->callback(&this->hdr, (const char *) this->buf, this->userdata);
          memset(&this->hdr, 0, sizeof(fcgi_header_t));
       }
    }

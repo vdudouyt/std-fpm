@@ -46,7 +46,7 @@ void fd_ctx_free(fd_ctx_t *this) {
 
 fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener) {
    struct sockaddr_un client_sockaddr;
-   int len = sizeof(client_sockaddr);
+   unsigned int len = sizeof(client_sockaddr);
    int client_sock = accept(listener->fd, (struct sockaddr *) &client_sockaddr, &len);
    if(client_sock == -1) RETURN_ERROR("[fd_ctx] failed while accepting socket");
    fd_setnonblocking(client_sock);

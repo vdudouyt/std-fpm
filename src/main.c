@@ -94,7 +94,7 @@ void onsocketread(fd_ctx_t *ctx) {
 
       if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
          DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
-         fcgi_parser_write(ctx->client->msg_parser, buf, bytes_read);
+         fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) buf, bytes_read);
       }
    }
 }

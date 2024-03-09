@@ -55,7 +55,7 @@ void fcgi_params_parser_write(fcgi_params_parser_t *this, const char *input, uns
       const bool got_uint32   = this->pos == 4 &&  (this->buf[0] & 0x80);
 
       if(this->status <= STATUS_READ_VALUE_LENGTH && (got_uint8 || got_uint32)) {
-         int *out = this->status == STATUS_READ_VALUE_LENGTH ? &this->value_length : &this->key_length;
+         unsigned int *out = this->status == STATUS_READ_VALUE_LENGTH ? &this->value_length : &this->key_length;
          *out = got_uint32 ? BE32(this->buf[0] & 0x7F, this->buf[1], this->buf[2], this->buf[3]) : this->buf[0];
          this->status++;
          this->pos = 0;
@@ -66,8 +66,8 @@ void fcgi_params_parser_write(fcgi_params_parser_t *this, const char *input, uns
          char keybuf[MAX_KEY_LENGTH];
          memset(keybuf, 0, sizeof(keybuf));
          memcpy(keybuf, this->buf, MIN(this->key_length, sizeof(keybuf) - 1));
-         char *value = &this->buf[MIN(this->key_length, this->buf_size - 1)];
-         if(this->callback) this->callback(keybuf, value, this->userdata);
+         unsigned char *value = &this->buf[MIN(this->key_length, this->buf_size - 1)];
+         if(this->callback) this->callback(keybuf, (const char*) value, this->userdata);
          this->pos = this->status = this->key_length = this->value_length = 0;
       }
    }
