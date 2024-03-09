@@ -15,6 +15,7 @@ A language-agnostic FastCGI process manager
 %prep
 find . -mindepth 1 -delete # Clean out old files
 cp -af %{SOURCEURL0}/. .
+sed -i s/www-data/nobody/ conf/std-fpm.conf
 
 %build
 %cmake
@@ -27,7 +28,9 @@ cp -af %{SOURCEURL0}/. .
 /etc/std-fpm.conf
 /etc/systemd/system/std-fpm.service
 %dir /run/std-fpm/
-%attr(0777,apache,apache) %dir /run/std-fpm/
+%dir /run/std-fpm/pool/
+%attr(0755,nobody,nobody) %dir /run/std-fpm/
+%attr(0755,nobody,nobody) %dir /run/std-fpm/pool/
 
 %changelog
 * Sat Mar 09 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.1-1

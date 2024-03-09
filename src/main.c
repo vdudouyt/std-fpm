@@ -264,9 +264,9 @@ int main(int argc, char **argv) {
    log_set_echo(true);
    cfg = stdfpm_read_config(argc, argv);
    if(!cfg) EXIT_WITH_ERROR("Read config failed: %s", strerror(errno));
+   if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
    if(cfg->gid > 0 && setgid(cfg->gid) == -1) EXIT_WITH_ERROR("Couldn't set process gid: %s", strerror(errno));
    if(cfg->uid > 0 && setuid(cfg->uid) == -1) EXIT_WITH_ERROR("Couldn't set process uid: %s", strerror(errno));
-   if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
    if(!pool_init(cfg->pool)) EXIT_WITH_ERROR("Pool initialization failed (failed malloc?)");
 
    int listen_sock = stdfpm_create_listening_socket(cfg->listen);
