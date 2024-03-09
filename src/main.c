@@ -29,11 +29,11 @@ static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *user
 static void onfcgiparam(const char *key, const char *value, void *userdata);
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size);
 
-#define RETURN_ERROR(msg) { perror(msg); exit(-1); }
+#define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-   if(listen_sock == -1) RETURN_ERROR("[main] couldn't create a listener socket");
+   if(listen_sock == -1) EXIT_WITH_ERROR("[main] couldn't create a listener socket: %s", strerror(errno));
 
    struct sockaddr_un s_un;
    s_un.sun_family = AF_UNIX;
@@ -44,12 +44,12 @@ static int stdfpm_create_listening_socket(const char *sock_path) {
    }
 
    if(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
-      RETURN_ERROR("[main] failed to bind a unix socket");
+      EXIT_WITH_ERROR("[main] failed to bind a unix domain socket at %s: %s", s_un.sun_path, strerror(errno));
    }
 
    chmod(s_un.sun_path, 0777);
    if(listen(listen_sock, 1024) == -1) {
-      RETURN_ERROR("[main] failed to listen a unix socket");
+      EXIT_WITH_ERROR("[main] failed to listen a unix domain socket at %s: %s", s_un.sun_path, strerror(errno));
    }
 
    fd_setnonblocking(listen_sock);
@@ -263,17 +263,17 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
 int main(int argc, char **argv) {
    log_set_echo(true);
    cfg = stdfpm_read_config(argc, argv);
-   if(!cfg) RETURN_ERROR("Read config failed");
-   if(cfg->gid > 0 && setgid(cfg->gid) == -1) RETURN_ERROR("Couldn't set process gid");
-   if(cfg->uid > 0 && setuid(cfg->uid) == -1) RETURN_ERROR("Couldn't set process uid");
-   if(!log_open(cfg->error_log)) RETURN_ERROR("Couldn't open log");
-   if(!pool_init(cfg->pool)) RETURN_ERROR("Pool initialization failed");
+   if(!cfg) EXIT_WITH_ERROR("Read config failed: %s", strerror(errno));
+   if(cfg->gid > 0 && setgid(cfg->gid) == -1) EXIT_WITH_ERROR("Couldn't set process gid: %s", strerror(errno));
+   if(cfg->uid > 0 && setuid(cfg->uid) == -1) EXIT_WITH_ERROR("Couldn't set process uid: %s", strerror(errno));
+   if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
+   if(!pool_init(cfg->pool)) EXIT_WITH_ERROR("Pool initialization failed (failed malloc?)");
 
    int listen_sock = stdfpm_create_listening_socket(cfg->listen);
 
    if(!cfg->foreground) {
       log_set_echo(false);
-      if(daemon(0, 0) != 0) RETURN_ERROR("Couldnt' daemonize");
+      if(daemon(0, 0) != 0) EXIT_WITH_ERROR("Couldnt' daemonize");
    }
 
    signal(SIGPIPE, SIG_IGN);

@@ -39,8 +39,9 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    strncpy(ret->filepath, path, sizeof(ret->filepath));
 
    if(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) == -1) {
+      log_write("[process_pool] failed to bind a unix socket at %s: %s", ret->s_un.sun_path, strerror(errno));
       close(listen_sock);
-      RETURN_ERROR("[process_pool] failed to bind a unix socket");
+      return NULL;
    }
 
    chmod(ret->s_un.sun_path, 0777);
