@@ -61,7 +61,9 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
 
       char *pathname_copy = strdup(path);
       char *directory_path = pathname_copy ? dirname(pathname_copy) : NULL;
-      if(directory_path) chdir(directory_path);
+      if(directory_path) {
+         if(chdir(directory_path) != 0) log_write("[process pool] failed to chdir: %s", directory_path);
+      }
       free(directory_path);
 
       dup2(listen_sock, STDIN_FILENO);
@@ -71,7 +73,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
 
       // execve failed, send error response to std-fpm worker and terminate
       log_write("[fastcgi spawner] failed to start %s: %s", path, strerror(errno));
-      char response[128], fcgi_response[256];
+      char response[128];
 
       switch(errno) {
          case ENOENT:

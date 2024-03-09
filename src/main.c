@@ -74,8 +74,6 @@ void onsocketread(fd_ctx_t *ctx) {
    if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
    else if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
 
-   fd_ctx_t *pipeTo = ctx->pipeTo;
-
    static char buf[4096];
    int bytes_read;
    while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
@@ -190,8 +188,12 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       DEBUG("Started child process: %s", newctx->name);
       wheel = g_list_prepend(wheel, newctx);
 
+      #ifdef DEBUG_LOG
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
       DEBUG("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
+      #else
+      buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
+      #endif
    }
 }
 
