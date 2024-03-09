@@ -1,5 +1,6 @@
 #include "config.h"
 #include "log.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <gmodule.h>
@@ -9,6 +10,8 @@
 
 #define SHOW_ERROR_AND_EXIT(...) { log_write(__VA_ARGS__); exit(-1); }
 
+static void print_help_and_exit(int argc, char **argv);
+
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    stdfpm_config_t *cfg = malloc(sizeof(stdfpm_config_t));
    if(!cfg) SHOW_ERROR_AND_EXIT("[config] malloc failed")
@@ -16,7 +19,7 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
 
    int c;
    char *cfgpath = "/etc/std-fpm.conf";
-   while ((c = getopt (argc, argv, "fc:")) != -1) {
+   while ((c = getopt (argc, argv, "hfc:")) != -1) {
       switch (c) {
          case 'f':
             cfg->foreground = true;
@@ -24,6 +27,9 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
          case 'c':
             cfgpath = optarg;
             break;
+         case 'h':
+         default:
+            print_help_and_exit(argc, argv);
       }
    }
 
@@ -61,4 +67,12 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");
 
    return cfg;
+}
+
+static void print_help_and_exit(int argc, char **argv) {
+   fprintf(stderr, "Usage: %s [-h] [-f] [-c filename]\n", argv[0]);
+   fprintf(stderr, "Options:\n");
+   fprintf(stderr, "  -f:      foreground mode\n");
+   fprintf(stderr, "  -c file: specify an alternate config\n");
+   exit(-1);
 }
