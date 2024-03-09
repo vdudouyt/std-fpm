@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <string.h>
 #include <gmodule.h>
 #include "fdutils.h"
 #include "log.h"

@@ -2,10 +2,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/select.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <gmodule.h>
+#include <errno.h>
 
 #include "fd_ctx.h"
 #include "fdutils.h"

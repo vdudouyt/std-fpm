@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 2.8)
 set(CMAKE_BUILD_TYPE Debug)
 option(DEBUG_LOG "Produce debug log" OFF)
 
-project(std-fpm)
+project(std-fpm C)
 find_package(PkgConfig REQUIRED)
 pkg_search_module(GLIB REQUIRED glib-2.0)
 include_directories(${GLIB_INCLUDE_DIRS})
@@ -27,6 +27,7 @@ if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
 endif(DEBUG_LOG)
 
+add_compile_options(-std=gnu99)
 add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER})
