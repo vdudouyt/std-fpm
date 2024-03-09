@@ -1,4 +1,4 @@
 #!/bin/bash
-chown www-data:www-data /run/std-fpm/
+chown -R www-data:www-data /run/std-fpm/
 systemctl enable std-fpm.service
 systemctl start std-fpm
