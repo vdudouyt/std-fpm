@@ -1,26 +1,23 @@
 STD-FPM
 =============
-A language-agnostic FastCGI process manager implementation
+A language-agnostic FastCGI process manager
+* Highly efficient event-driven architecture based on non-blocking I/O
+* Starts and manages everything that supports the [FastCGI Startup Protocol](https://www.mit.edu/~yandros/doc/specs/fcgi-spec.html#S2.2)
+* Dynamically controls FastCGI process population depending on incoming traffic
+* Compatible with Nginx (recommended) and Apache
+* Almost no configuration required
 
-** Webserver configuration examples **
+## Webserver configuration examples
 
-Nginx (*ngx_http_fastcgi_module*)
+### Nginx (through *ngx_http_fastcgi_module*)
 ```nohighlight
 location ~ \.fcgi$ {
    include fastcgi.conf;
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
 }
 ```
-Way #2:
-```nohighlight
-location /cgi-bin/ {
-   root /var/www;
-   include fastcgi.conf;
-   fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
-}
-```
 
-Apache (*mod_proxy_fcgi*)
+### Apache (through *mod_proxy_fcgi*)
 ```nohighlight
 $ a2enmod proxy_fcgi
 ```
@@ -31,8 +28,8 @@ $ a2enmod proxy_fcgi
 </FilesMatch>
 ```
 
-** Build packages **
+## Build binary packages
 ```nohighlight
-$ fakeroot dpkg-buildpackage -nc    # .deb
-$ rpmbuild -bb redhat/std-fpm.spec  # .rpm
+$ fakeroot dpkg-buildpackage -nc    # Debian way
+$ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 ```
