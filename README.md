@@ -11,6 +11,14 @@ location ~ \.fcgi$ {
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
 }
 ```
+Way #2:
+```nohighlight
+location /cgi-bin/ {
+   root /var/www;
+   include fastcgi.conf;
+   fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
+}
+```
 
 Apache (*mod_proxy_fcgi*)
 ```nohighlight
