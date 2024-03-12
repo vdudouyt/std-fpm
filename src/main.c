@@ -2,12 +2,13 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/select.h>
+#include <sys/epoll.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <gmodule.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "fd_ctx.h"
 #include "fdutils.h"
@@ -19,8 +20,8 @@
 #include "debug.h"
 #include "config.h"
 
-GList *wheel = NULL;
 stdfpm_config_t *cfg = NULL;
+int epollfd;
 
 static void onconnect(fd_ctx_t *lctx);
 static void onsocketread(fd_ctx_t *ctx);
@@ -30,6 +31,15 @@ static void onfcgiparam(const char *key, const char *value, void *userdata);
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size);
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
+
+void add_to_wheel(fd_ctx_t *ctx) {
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.data.ptr = ctx;
+
+   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+}
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -64,7 +74,8 @@ void onconnect(fd_ctx_t *listen_ctx) {
    ctx->client->msg_parser->callback = onfcgimessage;
    ctx->client->params_parser->callback = onfcgiparam;
    DEBUG("[%s] new connection accepted: %s", listen_ctx->name, ctx->name);
-   wheel = g_list_prepend(wheel, ctx);
+
+   add_to_wheel(ctx);
 }
 
 void onsocketread(fd_ctx_t *ctx) {
@@ -186,7 +197,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
       DEBUG("Started child process: %s", newctx->name);
-      wheel = g_list_prepend(wheel, newctx);
+      add_to_wheel(newctx);
 
       #ifdef DEBUG_LOG
       size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
@@ -197,33 +208,20 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    }
 }
 
-static int stdfpm_prepare_fds(fd_set *read_fds, fd_set *write_fds) {
-   int maxfd = 0;
-   FD_ZERO(read_fds);
-   FD_ZERO(write_fds);
-
-   for(GList *it = wheel; it != NULL; it = it->next) {
-      fd_ctx_t *ctx = it->data;
-      DEBUG("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
-      FD_SET(ctx->fd, read_fds);
-      if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, write_fds);
-      if(ctx->fd > maxfd) maxfd = ctx->fd;
-   }
-   return maxfd;
-}
-
-static void stdfpm_process_events(fd_set *read_fds, fd_set *write_fds) {
-   for(GList *it = wheel; it != NULL; it = it->next) {
-      fd_ctx_t *ctx = it->data;
-      if(FD_ISSET(ctx->fd, read_fds)) {
-         ctx->type == STDFPM_LISTEN_SOCK ? onconnect(ctx) : onsocketread(ctx);
+static void stdfpm_process_events(struct epoll_event *pevents, int event_count) {
+   for(int i = 0; i < event_count; i++) {
+      fd_ctx_t *ctx = pevents[i].data.ptr;
+      if(ctx->type == STDFPM_LISTEN_SOCK) {
+         onconnect(ctx);
+         continue;
       }
-      if(FD_ISSET(ctx->fd, write_fds)) {
-         onsocketwriteok(ctx);
-      }
+      if(pevents[i].events & EPOLLIN) onsocketread(ctx);
+      if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
+      //if(pevents[i].events & EPOLLHUP) ondisconnect(ctx);
    }
 }
 
+/*
 static void stdfpm_cleanup() {
    GList *it = wheel;
    while(it != NULL) {
@@ -240,7 +238,7 @@ static void stdfpm_cleanup() {
             ctx->pipeTo = NULL;
          }
 
-         wheel = g_list_delete_link(wheel, it);
+         remove_from_wheel(ctx);
          DEBUG("[%s] connection closed, removing from interest", ctx->name);
          close(ctx->fd);
          fd_ctx_free(ctx);
@@ -249,6 +247,7 @@ static void stdfpm_cleanup() {
       it = next;
    }
 }
+*/
 
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
    DEBUG("fcgi_send_response");
@@ -284,7 +283,9 @@ int main(int argc, char **argv) {
 
    fd_ctx_set_name(listen_ctx, "listen_sock");
    DEBUG("[%s] server created", listen_ctx->name);
-   wheel = g_list_prepend(wheel, listen_ctx);
+
+   epollfd = epoll_create( 0xCAFE );
+   add_to_wheel(listen_ctx);
 
    struct timeval timeout;
    timeout.tv_sec  = 60;
@@ -292,25 +293,24 @@ int main(int argc, char **argv) {
 
    time_t last_clean = time(NULL);
 
+   const unsigned int EVENTS_COUNT = 20;
+   struct epoll_event pevents[EVENTS_COUNT];
+
    while(1) {
       if(time(NULL) - last_clean >= 60) {
          last_clean = time(NULL);
          pool_shutdown_inactive_processes(60);
       }
 
-      fd_set read_fds, write_fds;
-      int maxfd = stdfpm_prepare_fds(&read_fds, &write_fds);
-
-      // we don't have that much of idle file descriptors due to the way how FastCGI is working,
-      // so no need of O(1) descriptor polling here
-      int ret = select(maxfd + 1, &read_fds, &write_fds, NULL, &timeout);
-      if(ret < 0) {
-         perror("select");
+      int event_count = epoll_wait(epollfd, pevents, EVENTS_COUNT, 10000);
+      log_write("%d events received", event_count);
+      if(event_count < 0) {
+         perror("epoll");
          exit(-1);
       }
 
-      if(ret == 0) continue;
-      stdfpm_process_events(&read_fds, &write_fds);
-      stdfpm_cleanup();
+      if(event_count == 0) continue;
+      stdfpm_process_events(pevents, event_count);
+      //stdfpm_cleanup();
    }
 }
