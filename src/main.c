@@ -81,34 +81,52 @@ void onconnect(fd_ctx_t *listen_ctx) {
 void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
 
-   buf_t *buf_to_write = NULL;
-   if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
-   else if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
+   //buf_t *buf_to_write = NULL;
+   //if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
+   if(!ctx->client) return;
 
-   static char buf[4096];
-   int bytes_read;
-   while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
-      DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
+   unsigned int space_available = sizeof(ctx->client->inMemoryBuf) - ctx->client->writePos;
+   if(space_available == 0) {
+      log_write("[%s] no space in buffer", ctx->name);
+      return;
+   }
 
+   log_write("space_available = %d", space_available);
+   int bytes_read = recv(ctx->fd, &ctx->client->inMemoryBuf[ctx->client->writePos], space_available, 0);
+   if(bytes_read == 0) {
+      log_write("[%s] disconnected", ctx->name);
+      return;
+   }
+   ctx->client->writePos += bytes_read;
+   log_write("bytes_read = %d", bytes_read);
+
+   #ifdef DEBUG_LOG
+   hexdump(ctx->client->inMemoryBuf, ctx->client->writePos);
+   #endif
+
+//   while(1) {
+      //DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
+
+/*
       if(bytes_read == 0) {
          if(ctx->pipeTo) ctx->pipeTo->eof = true;
          ctx->eof = true;
          break;
       }
+*/
+      //buf_write(buf_to_write, buf, bytes_read);
 
-      #ifdef DEBUG_LOG
-      hexdump(buf, bytes_read);
-      #endif
-      buf_write(buf_to_write, buf, bytes_read);
-
+/*
       if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
          DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
          fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) buf, bytes_read);
       }
-   }
+*/
+//   }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
+/*
    DEBUG("[%s] socket is ready for writing", ctx->name);
    size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
    DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
@@ -135,6 +153,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
          buf_reset(&ctx->outBuf);
       }
    }
+*/
 }
 
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
@@ -181,7 +200,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       if(!stdfpm_allowed_extension(value, cfg->extensions)) {
          char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
-         fcgi_send_response(ctx, response, strlen(response));
+         //fcgi_send_response(ctx, response, strlen(response));
          return;
       }
 
@@ -189,7 +208,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       if(!proc) {
          DEBUG("[%s] couldn't acquire FastCGI process", ctx->name);
-         buf_reset(&ctx->outBuf);
+         //buf_reset(&ctx->outBuf);
          ctx->eof = true;
          return;
       }
@@ -198,13 +217,6 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       fd_ctx_bidirectional_pipe(ctx, newctx);
       DEBUG("Started child process: %s", newctx->name);
       add_to_wheel(newctx);
-
-      #ifdef DEBUG_LOG
-      size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
-      DEBUG("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
-      #else
-      buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
-      #endif
    }
 }
 
@@ -249,6 +261,7 @@ static void stdfpm_cleanup() {
 }
 */
 
+/*
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
    DEBUG("fcgi_send_response");
    buf_reset(&ctx->outBuf);
@@ -258,6 +271,7 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
    if(ctx->pipeTo) ctx->pipeTo->eof = true;
    ctx->eof = true;
 }
+*/
 
 int main(int argc, char **argv) {
    log_set_echo(true);

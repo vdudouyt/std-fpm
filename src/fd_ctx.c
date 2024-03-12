@@ -20,9 +20,6 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
 
    ret->fd = fd;
    ret->type = type;
-   buf_reset(&ret->outBuf);
-   
-   ret->client = NULL;
    return ret;
 }
 
