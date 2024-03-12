@@ -93,19 +93,24 @@ void onsocketread(fd_ctx_t *ctx) {
 
    log_write("space_available = %d", space_available);
    int bytes_read = recv(ctx->fd, &ctx->client->inMemoryBuf[ctx->client->writePos], space_available, 0);
+   DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
    if(bytes_read == 0) {
       log_write("[%s] disconnected", ctx->name);
       return;
    }
+
+   if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
+      DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
+      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &ctx->client->inMemoryBuf[ctx->client->writePos], bytes_read);
+   }
+
    ctx->client->writePos += bytes_read;
-   log_write("bytes_read = %d", bytes_read);
 
    #ifdef DEBUG_LOG
    hexdump(ctx->client->inMemoryBuf, ctx->client->writePos);
    #endif
 
 //   while(1) {
-      //DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
 
 /*
       if(bytes_read == 0) {
@@ -117,17 +122,33 @@ void onsocketread(fd_ctx_t *ctx) {
       //buf_write(buf_to_write, buf, bytes_read);
 
 /*
-      if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
-         DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
-         fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) buf, bytes_read);
-      }
 */
 //   }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
+   DEBUG("[%s] starting onsocketwriteok()", ctx->name);
+   DEBUG("[%s] client = %d pipeTo = %d", ctx->name, ctx->client, ctx->pipeTo);
+   if(!ctx->pipeTo) {
+      DEBUG("[%s] no pipe");
+      return;
+   }
+   fcgi_client_t *src = ctx->pipeTo->client;
+   if(!src) {
+      DEBUG("[%s] paired counterpart is not a client", ctx->name);
+      return;
+   }
+   DEBUG("[%s] bytes_to_write = %d", ctx->name, src->writePos - src->readPos);
+
+   if(src->readPos < src->writePos) {
+      unsigned int bytes_to_write = src->writePos - src->readPos;
+      DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
+      ssize_t bytes_written = write(ctx->fd, &src->inMemoryBuf[src->readPos], bytes_to_write);
+      DEBUG("[%s] %d bytes written", ctx->name, bytes_written);
+      if(bytes_written <= 0) return;
+      src->readPos += bytes_written;
+   }
 /*
-   DEBUG("[%s] socket is ready for writing", ctx->name);
    size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
    DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
    if(bytes_to_write > 0) {
