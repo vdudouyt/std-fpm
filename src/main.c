@@ -84,7 +84,7 @@ void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
 
    if(!buf_ready_write(&ctx->inBuf, 16)) {
-      log_write("[%s] buf is not ready for writing", ctx->name);
+      DEBUG("[%s] buf is not ready for writing", ctx->name);
       return;
    }
 
@@ -92,10 +92,10 @@ void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
 
    if(bytes_read < 0) {
-      log_write("[%s] buf_read_fd() failed", ctx->name);
+      DEBUG("[%s] buf_read_fd() failed", ctx->name);
       return;
    } else if(bytes_read == 0) {
-      log_write("[%s] disconnected", ctx->name);
+      DEBUG("[%s] disconnected", ctx->name);
       return;
    }
 
@@ -118,7 +118,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
    fd_ctx_t *pipe = ctx->pipeTo;
 
    if(!pipe) {
-      log_write("[%s] no pipe", ctx->name);
+      DEBUG("[%s] no pipe", ctx->name);
       return;
    }
 
