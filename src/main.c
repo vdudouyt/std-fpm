@@ -83,22 +83,6 @@ void onconnect(fd_ctx_t *listen_ctx) {
 void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
 
-/*
-   if(ctx->pipeTo) {
-      DEBUG("[%s](%d) transferring bytes to %s(%d)", ctx->name, ctx->fd, ctx->pipeTo->name, ctx->pipeTo->fd);
-      int fildes[2];
-      int ret = pipe(fildes);
-      assert(ret != -1);
-
-      ssize_t bytes_written = splice(ctx->fd, NULL, ctx->pipeTo->fd, NULL, 4096, SPLICE_F_NONBLOCK);
-      if(bytes_written == -1) {
-         perror("splice");
-      }
-      DEBUG("[%s] %d bytes transferred", ctx->name, bytes_written);
-      return;
-   }
-*/
-
    if(!buf_ready_write(&ctx->inBuf, 16)) {
       log_write("[%s] buf is not ready for writing", ctx->name);
       return;
@@ -127,21 +111,6 @@ void onsocketread(fd_ctx_t *ctx) {
    if(ctx->pipeTo) {
       onsocketwriteok(ctx->pipeTo);
    }
-
-//   while(1) {
-
-/*
-      if(bytes_read == 0) {
-         if(ctx->pipeTo) ctx->pipeTo->eof = true;
-         ctx->eof = true;
-         break;
-      }
-*/
-      //buf_write(buf_to_write, buf, bytes_read);
-
-/*
-*/
-//   }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
@@ -255,46 +224,6 @@ static void stdfpm_process_events(struct epoll_event *pevents, int event_count) 
    }
 }
 
-/*
-static void stdfpm_cleanup() {
-   GList *it = wheel;
-   while(it != NULL) {
-      GList *next = it->next;
-      fd_ctx_t *ctx = it->data;
-
-      if(ctx->eof && buf_bytes_remaining(&ctx->outBuf) == 0) {
-         if(ctx->process) {
-            pool_release_process(ctx->process);
-         }
-
-         if(ctx->pipeTo) {
-            ctx->pipeTo->pipeTo = NULL;
-            ctx->pipeTo = NULL;
-         }
-
-         remove_from_wheel(ctx);
-         DEBUG("[%s] connection closed, removing from interest", ctx->name);
-         close(ctx->fd);
-         fd_ctx_free(ctx);
-      }
-
-      it = next;
-   }
-}
-*/
-
-/*
-static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
-   DEBUG("fcgi_send_response");
-   buf_reset(&ctx->outBuf);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, response, size);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, "", 0);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
-   if(ctx->pipeTo) ctx->pipeTo->eof = true;
-   ctx->eof = true;
-}
-*/
-
 int main(int argc, char **argv) {
    log_set_echo(true);
    cfg = stdfpm_read_config(argc, argv);
@@ -351,6 +280,5 @@ int main(int argc, char **argv) {
 
       if(event_count == 0) continue;
       stdfpm_process_events(pevents, event_count);
-      //stdfpm_cleanup();
    }
 }
