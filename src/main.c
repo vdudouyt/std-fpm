@@ -251,7 +251,7 @@ static void stdfpm_process_events(struct epoll_event *pevents, int event_count) 
       }
       if(pevents[i].events & EPOLLIN) onsocketread(ctx);
       if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
-      if((pevents[i].events & EPOLLHUP) || (pevents[i].events & EPOLLRDHUP)) ondisconnect(ctx);
+      if(pevents[i].events & EPOLLRDHUP) ondisconnect(ctx);
    }
 }
 
@@ -321,7 +321,12 @@ int main(int argc, char **argv) {
    DEBUG("[%s] server created", listen_ctx->name);
 
    epollfd = epoll_create( 0xCAFE );
-   add_to_wheel(listen_ctx);
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN;
+   ev.data.ptr = listen_ctx;
+
+   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_ctx->fd, &ev) == 0);
 
    struct timeval timeout;
    timeout.tv_sec  = 60;
