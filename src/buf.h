@@ -13,3 +13,5 @@ bool buf_ready_write(buf_t *buf, size_t size);
 size_t buf_write(buf_t *this, char *buf, size_t size);
 size_t buf_move(buf_t *this, buf_t *from);
 size_t buf_bytes_remaining(buf_t *this);
+ssize_t buf_read_fd(buf_t *this, int fd);
+ssize_t buf_write_fd(buf_t *this, int fd);

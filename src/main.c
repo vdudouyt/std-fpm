@@ -1,8 +1,10 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/epoll.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -35,7 +37,7 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
 void add_to_wheel(fd_ctx_t *ctx) {
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+   ev.events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP;
    ev.data.ptr = ctx;
 
    assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
@@ -81,34 +83,50 @@ void onconnect(fd_ctx_t *listen_ctx) {
 void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
 
-   //buf_t *buf_to_write = NULL;
-   //if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
-   if(!ctx->client) return;
+/*
+   if(ctx->pipeTo) {
+      DEBUG("[%s](%d) transferring bytes to %s(%d)", ctx->name, ctx->fd, ctx->pipeTo->name, ctx->pipeTo->fd);
+      int fildes[2];
+      int ret = pipe(fildes);
+      assert(ret != -1);
 
-   unsigned int space_available = sizeof(ctx->client->inMemoryBuf) - ctx->client->writePos;
-   if(space_available == 0) {
-      log_write("[%s] no space in buffer", ctx->name);
+      ssize_t bytes_written = splice(ctx->fd, NULL, ctx->pipeTo->fd, NULL, 4096, SPLICE_F_NONBLOCK);
+      if(bytes_written == -1) {
+         perror("splice");
+      }
+      DEBUG("[%s] %d bytes transferred", ctx->name, bytes_written);
+      return;
+   }
+*/
+
+   if(!buf_ready_write(&ctx->inBuf, 16)) {
+      log_write("[%s] buf is not ready for writing", ctx->name);
       return;
    }
 
-   log_write("space_available = %d", space_available);
-   int bytes_read = recv(ctx->fd, &ctx->client->inMemoryBuf[ctx->client->writePos], space_available, 0);
+   ssize_t bytes_read = buf_read_fd(&ctx->inBuf, ctx->fd);
    DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
-   if(bytes_read == 0) {
+
+   if(bytes_read < 0) {
+      log_write("[%s] buf_read_fd() failed", ctx->name);
+      return;
+   } else if(bytes_read == 0) {
       log_write("[%s] disconnected", ctx->name);
       return;
    }
 
    if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
       DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
-      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &ctx->client->inMemoryBuf[ctx->client->writePos], bytes_read);
+      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &ctx->inBuf.data[ctx->inBuf.writePos - bytes_read], bytes_read);
    }
 
-   ctx->client->writePos += bytes_read;
-
    #ifdef DEBUG_LOG
-   hexdump(ctx->client->inMemoryBuf, ctx->client->writePos);
+   hexdump((const char *) &ctx->inBuf.data, ctx->inBuf.writePos);
    #endif
+
+   if(ctx->pipeTo) {
+      onsocketwriteok(ctx->pipeTo);
+   }
 
 //   while(1) {
 
@@ -128,53 +146,19 @@ void onsocketread(fd_ctx_t *ctx) {
 
 void onsocketwriteok(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketwriteok()", ctx->name);
-   DEBUG("[%s] client = %d pipeTo = %d", ctx->name, ctx->client, ctx->pipeTo);
-   if(!ctx->pipeTo) {
-      DEBUG("[%s] no pipe");
+   fd_ctx_t *pipe = ctx->pipeTo;
+
+   if(!pipe) {
+      log_write("[%s] no pipe", ctx->name);
       return;
    }
-   fcgi_client_t *src = ctx->pipeTo->client;
-   if(!src) {
-      DEBUG("[%s] paired counterpart is not a client", ctx->name);
-      return;
+
+   if(buf_bytes_remaining(&pipe->inBuf)) {
+      int bytes_written = buf_write_fd(&pipe->inBuf, ctx->fd);
+      DEBUG("[%s] bytes_written = %d", ctx->name, bytes_written);
+   } else {
+      DEBUG("[%s] nothing to write", ctx->name);
    }
-   DEBUG("[%s] bytes_to_write = %d", ctx->name, src->writePos - src->readPos);
-
-   if(src->readPos < src->writePos) {
-      unsigned int bytes_to_write = src->writePos - src->readPos;
-      DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
-      ssize_t bytes_written = write(ctx->fd, &src->inMemoryBuf[src->readPos], bytes_to_write);
-      DEBUG("[%s] %d bytes written", ctx->name, bytes_written);
-      if(bytes_written <= 0) return;
-      src->readPos += bytes_written;
-   }
-/*
-   size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
-   DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
-   if(bytes_to_write > 0) {
-      #ifdef DEBUG_LOG
-      hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
-      #endif
-
-      int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
-      if(bytes_written == -1 && errno == EAGAIN) {
-         return;
-      }
-
-      if(bytes_written <= 0) {
-         DEBUG("[%s] write failed, discarding buffer", ctx->name);
-         buf_reset(&ctx->outBuf);
-         return;
-      }
-
-      ctx->outBuf.readPos += bytes_written;
-
-      if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
-         DEBUG("[%s] %d bytes written", ctx->name, bytes_written);
-         buf_reset(&ctx->outBuf);
-      }
-   }
-*/
 }
 
 void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
@@ -241,6 +225,23 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
    }
 }
 
+static void ondisconnect(fd_ctx_t *ctx) {
+   printf("*** disconnect ***\n");
+   DEBUG("[%s] ondisconnect()", ctx->name);
+   close(ctx->fd);
+
+   if(ctx->process) {
+      pool_release_process(ctx->process);
+   }
+
+   if(ctx->pipeTo) {
+      ctx->pipeTo->pipeTo = NULL;
+      ondisconnect(ctx->pipeTo);
+   }
+
+   fd_ctx_free(ctx);
+}
+
 static void stdfpm_process_events(struct epoll_event *pevents, int event_count) {
    for(int i = 0; i < event_count; i++) {
       fd_ctx_t *ctx = pevents[i].data.ptr;
@@ -250,7 +251,7 @@ static void stdfpm_process_events(struct epoll_event *pevents, int event_count) 
       }
       if(pevents[i].events & EPOLLIN) onsocketread(ctx);
       if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
-      //if(pevents[i].events & EPOLLHUP) ondisconnect(ctx);
+      if((pevents[i].events & EPOLLHUP) || (pevents[i].events & EPOLLRDHUP)) ondisconnect(ctx);
    }
 }
 
@@ -338,7 +339,6 @@ int main(int argc, char **argv) {
       }
 
       int event_count = epoll_wait(epollfd, pevents, EVENTS_COUNT, 10000);
-      log_write("%d events received", event_count);
       if(event_count < 0) {
          perror("epoll");
          exit(-1);

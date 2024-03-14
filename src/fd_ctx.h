@@ -10,7 +10,6 @@ typedef struct fcgi_client_s fcgi_client_t;
 struct fcgi_client_s {
    fcgi_parser_t *msg_parser;
    fcgi_params_parser_t *params_parser;
-   char inMemoryBuf[4096]; // buffer to write before SCRIPT_FILENAME can be determined
    unsigned int readPos, writePos;
 };
 
@@ -24,6 +23,7 @@ struct fd_ctx_s {
    char name[64];
    #endif
 
+   buf_t inBuf;
    fcgi_client_t *client;
    fcgi_process_t *process;
 };
