@@ -257,10 +257,6 @@ int main(int argc, char **argv) {
 
    assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_ctx->fd, &ev) == 0);
 
-   struct timeval timeout;
-   timeout.tv_sec  = 60;
-   timeout.tv_usec = 0;
-
    time_t last_clean = time(NULL);
 
    const unsigned int EVENTS_COUNT = 20;
