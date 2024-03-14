@@ -34,13 +34,23 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
-void add_to_wheel(fd_ctx_t *ctx) {
+static void add_to_wheel(fd_ctx_t *ctx) {
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP;
+   ev.events = EPOLLIN | EPOLLRDHUP;
    ev.data.ptr = ctx;
 
    assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+}
+
+static void set_writing(fd_ctx_t *ctx, bool value) {
+   struct epoll_event ev;
+   memset(&ev, 0, sizeof(struct epoll_event));
+   ev.events = EPOLLIN | EPOLLRDHUP;
+   if(value) ev.events |= EPOLLOUT;
+   ev.data.ptr = ctx;
+
+   assert(epoll_ctl(epollfd, EPOLL_CTL_MOD, ctx->fd, &ev) == 0);
 }
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
@@ -109,7 +119,7 @@ void onsocketread(fd_ctx_t *ctx) {
    #endif
 
    if(ctx->pipeTo) {
-      onsocketwriteok(ctx->pipeTo);
+      set_writing(ctx->pipeTo, true);
    }
 }
 
@@ -126,6 +136,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
       int bytes_written = buf_write_fd(&pipe->inBuf, ctx->fd);
       DEBUG("[%s] bytes_written = %d", ctx->name, bytes_written);
    } else {
+      set_writing(ctx, false);
       DEBUG("[%s] nothing to write", ctx->name);
    }
 }
@@ -203,8 +214,7 @@ static void ondisconnect(fd_ctx_t *ctx) {
    }
 
    if(ctx->pipeTo) {
-      ctx->pipeTo->pipeTo = NULL;
-      ondisconnect(ctx->pipeTo);
+      ctx->pipeTo->eof = true;
    }
 
    fd_ctx_free(ctx);
