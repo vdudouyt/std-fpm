@@ -195,7 +195,6 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 }
 
 static void ondisconnect(fd_ctx_t *ctx) {
-   printf("*** disconnect ***\n");
    DEBUG("[%s] ondisconnect()", ctx->name);
    close(ctx->fd);
 
