@@ -5,6 +5,7 @@
 #include <sys/un.h>
 #include <string.h>
 #include <gmodule.h>
+#include <unistd.h>
 #include "fdutils.h"
 #include "log.h"
 #include "debug.h"
@@ -93,7 +94,7 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
 static fcgi_process_t *pool_create_process(const char *path) {
    char socket_path[4096];
    startup_counter++;
-   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, startup_counter);
+   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d-%d.sock", pool_path, getpid(), startup_counter);
 
    fcgi_process_t *proc = fcgi_spawn(socket_path, path);
    if(!proc) return NULL;

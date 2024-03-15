@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
+#include <unistd.h>
 #include "log.h"
 
 static bool log_echo = false;
@@ -20,9 +21,9 @@ void log_write(const char *fmt, ...) {
    time(&rawtime);
    struct tm *info = localtime(&rawtime);
    char buf[256];
-   strftime(buf, sizeof(buf), "[%Y-%m-%d %H:%M:%S] ", info);
-   if(f) fprintf(f, "%s", buf);
-   if(log_echo) printf("%s", buf);
+   strftime(buf, sizeof(buf), "[%Y-%m-%d %H:%M:%S]", info);
+   if(f) fprintf(f, "%s[%d] ", buf, getpid());
+   if(log_echo) printf("%s[%d] ", buf, getpid());
    
    va_list args, args2;
    va_start(args, fmt);

@@ -277,10 +277,18 @@ int main(int argc, char **argv) {
    fd_ctx_set_name(listen_ctx, "listen_sock");
    DEBUG("[%s] server created", listen_ctx->name);
 
+   if(cfg->worker_processes >= 1) cfg->worker_processes--;
+
+   for(int i = 0; i < cfg->worker_processes; i++) {
+      pid_t newpid = fork();
+      if(newpid == -1) log_write("couldn't fork: %s", strerror(errno));
+      if(newpid <= 0) break;
+   }
+
    epollfd = epoll_create( 0xCAFE );
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
-   ev.events = EPOLLIN;
+   ev.events = EPOLLIN | EPOLLEXCLUSIVE;
    ev.data.ptr = listen_ctx;
 
    if(epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_ctx->fd, &ev) != 0) {
