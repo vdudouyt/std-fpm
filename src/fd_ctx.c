@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <errno.h>
 
-#define RETURN_ERROR(msg) { log_write(msg); return NULL; }
+#define RETURN_ERROR(...) { log_write(__VA_ARGS__); return NULL; }
 
 fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
@@ -49,7 +50,7 @@ fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener) {
    struct sockaddr_un client_sockaddr;
    unsigned int len = sizeof(client_sockaddr);
    int client_sock = accept(listener->fd, (struct sockaddr *) &client_sockaddr, &len);
-   if(client_sock == -1) RETURN_ERROR("[fd_ctx] failed while accepting socket");
+   if(client_sock == -1) RETURN_ERROR("[fd_ctx] failed while accepting socket: %s", strerror(errno));
    fd_setnonblocking(client_sock);
    fd_setcloseonexec(client_sock);
    return fd_new_client_ctx(client_sock);
