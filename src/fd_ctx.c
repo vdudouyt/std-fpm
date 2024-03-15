@@ -13,6 +13,9 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    fd_ctx_t *ret = malloc(sizeof(fd_ctx_t));
    if(!ret) RETURN_ERROR("[fd_ctx] malloc failed");
    memset(ret, 0, sizeof(fd_ctx_t));
+   ret->memBuf = malloc(sizeof(buf_t));
+   if(!ret) RETURN_ERROR("[fd_ctx] memBuf malloc failed");
+   buf_reset(ret->memBuf);
 
    #ifdef DEBUG_LOG
    strcpy(ret->name, "<not set>");

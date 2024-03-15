@@ -34,6 +34,13 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
+#define SWAP(x,y) do {   \
+  typeof(x) _x = x;      \
+  typeof(y) _y = y;      \
+  x = _y;                \
+  y = _x;                \
+} while(0)
+
 static void add_to_wheel(fd_ctx_t *ctx) {
    struct epoll_event ev;
    memset(&ev, 0, sizeof(struct epoll_event));
@@ -92,13 +99,15 @@ void onconnect(fd_ctx_t *listen_ctx) {
 
 void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
+   buf_t *targetBuf = ctx->pipeTo ? ctx->pipeTo->memBuf : ctx->memBuf;
+   if(ctx->type != STDFPM_FCGI_CLIENT && targetBuf == ctx->memBuf) return;
 
-   if(!buf_ready_write(&ctx->inBuf, 16)) {
+   if(!buf_ready_write(targetBuf, 16)) {
       DEBUG("[%s] buf is not ready for writing", ctx->name);
       return;
    }
 
-   ssize_t bytes_read = buf_read_fd(&ctx->inBuf, ctx->fd);
+   ssize_t bytes_read = buf_read_fd(targetBuf, ctx->fd);
    DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
 
    if(bytes_read < 0) {
@@ -109,14 +118,14 @@ void onsocketread(fd_ctx_t *ctx) {
       return;
    }
 
+   #ifdef DEBUG_LOG
+   hexdump((const char *) &targetBuf->data, targetBuf->writePos);
+   #endif
+
    if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
       DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
-      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &ctx->inBuf.data[ctx->inBuf.writePos - bytes_read], bytes_read);
+      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &targetBuf->data[targetBuf->writePos - bytes_read], bytes_read);
    }
-
-   #ifdef DEBUG_LOG
-   hexdump((const char *) &ctx->inBuf.data, ctx->inBuf.writePos);
-   #endif
 
    if(ctx->pipeTo) {
       set_writing(ctx->pipeTo, true);
@@ -125,15 +134,9 @@ void onsocketread(fd_ctx_t *ctx) {
 
 void onsocketwriteok(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketwriteok()", ctx->name);
-   fd_ctx_t *pipe = ctx->pipeTo;
 
-   if(!pipe) {
-      DEBUG("[%s] no pipe", ctx->name);
-      return;
-   }
-
-   if(buf_bytes_remaining(&pipe->inBuf)) {
-      int bytes_written = buf_write_fd(&pipe->inBuf, ctx->fd);
+   if(buf_bytes_remaining(ctx->memBuf)) {
+      int bytes_written = buf_write_fd(ctx->memBuf, ctx->fd);
       DEBUG("[%s] bytes_written = %d", ctx->name, bytes_written);
    } else {
       set_writing(ctx, false);
@@ -200,6 +203,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
+      SWAP(ctx->memBuf, newctx->memBuf);
       DEBUG("Started child process: %s", newctx->name);
       add_to_wheel(newctx);
    }
@@ -217,7 +221,7 @@ static void ondisconnect(fd_ctx_t *ctx) {
       ctx->pipeTo->eof = true;
    }
 
-   fd_ctx_free(ctx);
+   //fd_ctx_free(ctx);
 }
 
 static void stdfpm_process_events(struct epoll_event *pevents, int event_count) {
