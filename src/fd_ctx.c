@@ -41,6 +41,7 @@ void fd_ctx_free(fd_ctx_t *this) {
       fcgi_params_parser_free(this->client->params_parser);
       free(this->client);
    }
+   free(this->memBuf);
    free(this);
 }
 
