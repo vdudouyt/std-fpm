@@ -205,7 +205,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
-      SWAP(ctx->memBuf, newctx->memBuf);
+      SWAP(ctx->memBuf, newctx->memBuf); // write the bytes accumulated before startup
       DEBUG("Started child process: %s", newctx->name);
       add_to_wheel(newctx);
    }
