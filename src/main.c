@@ -28,6 +28,7 @@ int epollfd;
 static void onconnect(fd_ctx_t *lctx);
 static void onsocketread(fd_ctx_t *ctx);
 static void onsocketwriteok(fd_ctx_t *ctx);
+static void ondisconnect(fd_ctx_t *ctx);
 static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 static void onfcgiparam(const char *key, const char *value, void *userdata);
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size);
@@ -141,6 +142,7 @@ void onsocketwriteok(fd_ctx_t *ctx) {
    } else {
       set_writing(ctx, false);
       DEBUG("[%s] nothing to write", ctx->name);
+      if(!ctx->pipeTo) ondisconnect(ctx);
    }
 }
 
@@ -197,7 +199,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
       if(!proc) {
          DEBUG("[%s] couldn't acquire FastCGI process", ctx->name);
          //buf_reset(&ctx->outBuf);
-         ctx->eof = true;
+         //ctx->eof = true;
          return;
       }
 
@@ -218,10 +220,13 @@ static void ondisconnect(fd_ctx_t *ctx) {
    }
 
    if(ctx->pipeTo) {
-      ctx->pipeTo->eof = true;
+      ctx->pipeTo->pipeTo = NULL;
+      if(!buf_bytes_remaining(ctx->pipeTo->memBuf)) {
+         ondisconnect(ctx->pipeTo);
+      }
    }
 
-   //fd_ctx_free(ctx);
+   fd_ctx_free(ctx);
 }
 
 static void stdfpm_process_events(struct epoll_event *pevents, int event_count) {
