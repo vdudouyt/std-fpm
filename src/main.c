@@ -190,7 +190,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       if(!stdfpm_allowed_extension(value, cfg->extensions)) {
          char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
-         //fcgi_send_response(ctx, response, strlen(response));
+         fcgi_send_response(ctx, response, strlen(response));
          return;
       }
 
@@ -240,6 +240,15 @@ static void stdfpm_process_events(struct epoll_event *pevents, int event_count) 
       if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
       if(pevents[i].events & EPOLLRDHUP) ondisconnect(ctx);
    }
+}
+
+static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
+   DEBUG("fcgi_send_response");
+   buf_reset(ctx->memBuf);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_STDOUT, response, size);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_STDOUT, "", 0);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+   set_writing(ctx, true);
 }
 
 int main(int argc, char **argv) {
