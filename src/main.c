@@ -10,7 +10,6 @@
 #include <signal.h>
 #include <gmodule.h>
 #include <errno.h>
-#include <assert.h>
 
 #include "fd_ctx.h"
 #include "fdutils.h"
@@ -48,7 +47,9 @@ static void add_to_wheel(fd_ctx_t *ctx) {
    ev.events = EPOLLIN | EPOLLRDHUP;
    ev.data.ptr = ctx;
 
-   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) == 0);
+   if(epoll_ctl(epollfd, EPOLL_CTL_ADD, ctx->fd, &ev) != 0) {
+      DEBUG("[%s] EPOLL_CTL_ADD failed", ctx->name);
+   }
 }
 
 static void set_writing(fd_ctx_t *ctx, bool value) {
@@ -58,7 +59,9 @@ static void set_writing(fd_ctx_t *ctx, bool value) {
    if(value) ev.events |= EPOLLOUT;
    ev.data.ptr = ctx;
 
-   assert(epoll_ctl(epollfd, EPOLL_CTL_MOD, ctx->fd, &ev) == 0);
+   if(epoll_ctl(epollfd, EPOLL_CTL_MOD, ctx->fd, &ev) != 0) {
+      DEBUG("[%s] EPOLL_CTL_MOD failed", ctx->name);
+   }
 }
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
@@ -280,7 +283,9 @@ int main(int argc, char **argv) {
    ev.events = EPOLLIN;
    ev.data.ptr = listen_ctx;
 
-   assert(epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_ctx->fd, &ev) == 0);
+   if(epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_ctx->fd, &ev) != 0) {
+      EXIT_WITH_ERROR("EPOLL_CTL_ADD failed: %s", strerror(errno));
+   }
 
    time_t last_clean = time(NULL);
 
