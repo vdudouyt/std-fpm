@@ -214,6 +214,7 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
 static void ondisconnect(fd_ctx_t *ctx) {
    DEBUG("[%s] ondisconnect()", ctx->name);
+   epoll_ctl(epollfd, EPOLL_CTL_DEL, ctx->fd, NULL);
    close(ctx->fd);
 
    if(ctx->process) {
