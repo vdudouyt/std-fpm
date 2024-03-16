@@ -67,10 +67,14 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       }
       free(directory_path);
 
+      char *filename = strrchr(path, '/');
+      if(filename && filename > path) filename--;
+      filename[0] = '.';
+
       dup2(listen_sock, STDIN_FILENO);
-      char *argv[] = { (char*) path, NULL };
+      char *argv[] = { (char*) filename, NULL };
       prctl(PR_SET_PDEATHSIG, SIGHUP); // terminate if parent process exits
-      execv(path, argv);
+      execv(filename, argv);
 
       // execve failed, send error response to std-fpm worker and terminate
       log_write("[fastcgi spawner] failed to start %s: %s", path, strerror(errno));
