@@ -31,6 +31,13 @@ static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size)
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
+#define SWAP(x,y) do {   \
+  typeof(x) _x = x;      \
+  typeof(y) _y = y;      \
+  x = _y;                \
+  y = _x;                \
+} while(0)
+
 static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    if(listen_sock == -1) EXIT_WITH_ERROR("[main] couldn't create a listener socket: %s", strerror(errno));
@@ -70,59 +77,42 @@ void onconnect(fd_ctx_t *listen_ctx) {
 void onsocketread(fd_ctx_t *ctx) {
    DEBUG("[%s] starting onsocketread()", ctx->name);
 
-   buf_t *buf_to_write = NULL;
-   if(ctx->pipeTo) buf_to_write = &ctx->pipeTo->outBuf;
-   else if(ctx->client) buf_to_write = &ctx->client->inMemoryBuf;
+   buf_t *targetBuf = ctx->pipeTo ? ctx->pipeTo->memBuf : ctx->memBuf;
+   if(ctx->type != STDFPM_FCGI_CLIENT && targetBuf == ctx->memBuf) return;
 
-   static char buf[4096];
-   int bytes_read;
-   while(buf_ready_write(buf_to_write, 4096) && (bytes_read = recv(ctx->fd, buf, sizeof(buf), 0)) >= 0) {
-      DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
+   if(!buf_ready_write(targetBuf, 16)) {
+      DEBUG("[%s] buf is not ready for writing", ctx->name);
+      return;
+   }
 
-      if(bytes_read == 0) {
-         if(ctx->pipeTo) ctx->pipeTo->eof = true;
-         ctx->eof = true;
-         break;
-      }
+   ssize_t bytes_read = buf_read_fd(targetBuf, ctx->fd);
+   DEBUG("[%s] received %d bytes", ctx->name, bytes_read);
 
-      #ifdef DEBUG_LOG
-      hexdump(buf, bytes_read);
-      #endif
-      buf_write(buf_to_write, buf, bytes_read);
+   if(bytes_read < 0) {
+      DEBUG("[%s] buf_read_fd() failed", ctx->name);
+      return;
+   } else if(bytes_read == 0) {
+      DEBUG("[%s] disconnected", ctx->name);
+      if(ctx->pipeTo) ctx->pipeTo->eof = true;
+      ctx->eof = true;
+      return;
+   }
 
-      if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
-         DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
-         fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) buf, bytes_read);
-      }
+   #ifdef DEBUG_LOG
+   hexdump((const char *) &targetBuf->data, targetBuf->writePos);
+   #endif
+
+   if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->pipeTo) {
+      DEBUG("[%s] forwarded %d bytes to FastCGI parser", ctx->name, bytes_read);
+      fcgi_parser_write(ctx->client->msg_parser, (unsigned char *) &targetBuf->data[targetBuf->writePos - bytes_read], bytes_read);
    }
 }
 
 void onsocketwriteok(fd_ctx_t *ctx) {
-   DEBUG("[%s] socket is ready for writing", ctx->name);
-   size_t bytes_to_write = ctx->outBuf.writePos - ctx->outBuf.readPos;
-   DEBUG("[%s] %d bytes to write", ctx->name, bytes_to_write);
-   if(bytes_to_write > 0) {
-      #ifdef DEBUG_LOG
-      hexdump(&ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
-      #endif
-
-      int bytes_written = write(ctx->fd, &ctx->outBuf.data[ctx->outBuf.readPos], bytes_to_write);
-      if(bytes_written == -1 && errno == EAGAIN) {
-         return;
-      }
-
-      if(bytes_written <= 0) {
-         DEBUG("[%s] write failed, discarding buffer", ctx->name);
-         buf_reset(&ctx->outBuf);
-         return;
-      }
-
-      ctx->outBuf.readPos += bytes_written;
-
-      if(ctx->outBuf.readPos == ctx->outBuf.writePos) {
-         DEBUG("[%s] %d bytes written", ctx->name, bytes_written);
-         buf_reset(&ctx->outBuf);
-      }
+   DEBUG("[%s] starting onsocketwriteok()", ctx->name);
+   if(buf_bytes_remaining(ctx->memBuf) && (ctx->pipeTo || ctx->eof)) {
+      int bytes_written = buf_write_fd(ctx->memBuf, ctx->fd);
+      DEBUG("[%s] bytes_written = %d", ctx->name, bytes_written);
    }
 }
 
@@ -178,22 +168,16 @@ void onfcgiparam(const char *key, const char *value, void *userdata) {
 
       if(!proc) {
          DEBUG("[%s] couldn't acquire FastCGI process", ctx->name);
-         buf_reset(&ctx->outBuf);
+         buf_reset(ctx->memBuf);
          ctx->eof = true;
          return;
       }
 
       fd_ctx_t *newctx = fd_new_process_ctx(proc);
       fd_ctx_bidirectional_pipe(ctx, newctx);
+      SWAP(ctx->memBuf, newctx->memBuf); // write the bytes accumulated before startup
       DEBUG("Started child process: %s", newctx->name);
       wheel = g_list_prepend(wheel, newctx);
-
-      #ifdef DEBUG_LOG
-      size_t bytes_written = buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
-      DEBUG("[%s] copied %d of buffered bytes to %s", ctx->name, bytes_written, newctx->name);
-      #else
-      buf_move(&newctx->outBuf, &ctx->client->inMemoryBuf);
-      #endif
    }
 }
 
@@ -204,9 +188,9 @@ static int stdfpm_prepare_fds(fd_set *read_fds, fd_set *write_fds) {
 
    for(GList *it = wheel; it != NULL; it = it->next) {
       fd_ctx_t *ctx = it->data;
-      DEBUG("Adding %s write=%d", ctx->name, buf_bytes_remaining(&ctx->outBuf));
+      DEBUG("Adding %s write=%d", ctx->name, buf_bytes_remaining(ctx->memBuf));
       FD_SET(ctx->fd, read_fds);
-      if(buf_bytes_remaining(&ctx->outBuf)) FD_SET(ctx->fd, write_fds);
+      if(buf_bytes_remaining(ctx->memBuf)) FD_SET(ctx->fd, write_fds);
       if(ctx->fd > maxfd) maxfd = ctx->fd;
    }
    return maxfd;
@@ -230,7 +214,7 @@ static void stdfpm_cleanup() {
       GList *next = it->next;
       fd_ctx_t *ctx = it->data;
 
-      if(ctx->eof && buf_bytes_remaining(&ctx->outBuf) == 0) {
+      if(ctx->eof && buf_bytes_remaining(ctx->memBuf) == 0) {
          if(ctx->process) {
             pool_release_process(ctx->process);
          }
@@ -252,10 +236,10 @@ static void stdfpm_cleanup() {
 
 static void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
    DEBUG("fcgi_send_response");
-   buf_reset(&ctx->outBuf);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, response, size);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_STDOUT, "", 0);
-   fcgi_write_buf(&ctx->outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+   buf_reset(ctx->memBuf);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_STDOUT, response, size);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_STDOUT, "", 0);
+   fcgi_write_buf(ctx->memBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
    if(ctx->pipeTo) ctx->pipeTo->eof = true;
    ctx->eof = true;
 }

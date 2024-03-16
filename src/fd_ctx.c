@@ -14,14 +14,12 @@ fd_ctx_t *fd_ctx_new(int fd, int type) {
    if(!ret) RETURN_ERROR("[fd_ctx] malloc failed");
    memset(ret, 0, sizeof(fd_ctx_t));
 
-   #ifdef DEBUG_LOG
-   strcpy(ret->name, "<not set>");
-   #endif
+   ret->memBuf = malloc(sizeof(buf_t));
+   if(!ret) RETURN_ERROR("[fd_ctx] memBuf malloc failed");
+   buf_reset(ret->memBuf);
 
    ret->fd = fd;
    ret->type = type;
-   buf_reset(&ret->outBuf);
-   
    ret->client = NULL;
    return ret;
 }
@@ -41,6 +39,7 @@ void fd_ctx_free(fd_ctx_t *this) {
       fcgi_params_parser_free(this->client->params_parser);
       free(this->client);
    }
+   free(this->memBuf);
    free(this);
 }
 

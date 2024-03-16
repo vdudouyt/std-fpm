@@ -1,3 +1,8 @@
+std-fpm (0.1-1~mt2) unstable; urgency=medium
+
+  * Initial release
+
+ -- Valentin Dudouyt <valentin.dudouyt@gmail.com>  Sat, 16 Mar 2024 15:11:25 +0200
 std-fpm (0.1-1) unstable; urgency=medium
 
   * Initial release
