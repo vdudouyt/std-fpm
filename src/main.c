@@ -286,6 +286,14 @@ int main(int argc, char **argv) {
    DEBUG("[%s] server created", listen_ctx->name);
    wheel = g_list_prepend(wheel, listen_ctx);
 
+   if(cfg->worker_processes >= 1) cfg->worker_processes--;
+
+   for(int i = 0; i < cfg->worker_processes; i++) {
+      pid_t newpid = fork();
+      if(newpid == -1) log_write("couldn't fork: %s", strerror(errno));
+      if(newpid <= 0) break;
+   }
+
    struct timeval timeout;
    timeout.tv_sec  = 60;
    timeout.tv_usec = 0;

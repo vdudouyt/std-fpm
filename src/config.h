@@ -12,6 +12,7 @@ typedef struct {
    char **extensions;
 
    bool foreground;
+   int worker_processes;
 } stdfpm_config_t;
 
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv);
