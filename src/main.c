@@ -235,11 +235,17 @@ static void stdfpm_process_events(struct epoll_event *pevents, int event_count) 
    for(int i = 0; i < event_count; i++) {
       fd_ctx_t *ctx = pevents[i].data.ptr;
       if(ctx->type == STDFPM_LISTEN_SOCK) {
-         onconnect(ctx);
-         continue;
+         if(pevents[i].events & EPOLLIN) { onconnect(ctx); }
+         if(pevents[i].events & EPOLLOUT) log_write("listen_sock epollout");
+         if(pevents[i].events & EPOLLRDHUP) log_write("listen_sock rdhup");
+         if(pevents[i].events & EPOLLHUP) log_write("listen_sock hup");
+      } else {
+         if(pevents[i].events & EPOLLIN) onsocketread(ctx);
+         if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
       }
-      if(pevents[i].events & EPOLLIN) onsocketread(ctx);
-      if(pevents[i].events & EPOLLOUT) onsocketwriteok(ctx);
+   }
+   for(int i = 0; i < event_count; i++) {
+      fd_ctx_t *ctx = pevents[i].data.ptr;
       if(pevents[i].events & EPOLLRDHUP) ondisconnect(ctx);
    }
 }
