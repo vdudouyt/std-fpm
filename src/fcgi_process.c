@@ -8,12 +8,12 @@
 #include <errno.h>
 #include <libgen.h>
 #include "log.h"
-#include "buf.h"
-#include "fcgi_writer.h"
+//#include "buf.h"
+//#include "fcgi_writer.h"
 #include "fcgitypes.h"
 #include "debug.h"
 
-static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
+//static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
 
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
@@ -87,7 +87,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
             snprintf(response, sizeof(response), "Status: 500\nContent-type: text/html\n\nStartup error: %s(%d)", strerror(errno), errno);
       }
 
-      fcgi_serve_response(listen_sock, response, strlen(response));
+      //fcgi_serve_response(listen_sock, response, strlen(response));
       close(listen_sock);
       close(STDIN_FILENO);
       unlink(ret->s_un.sun_path);
@@ -99,6 +99,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    }
 }
 
+/*
 static void fcgi_serve_response(int listen_sock, const char *response, size_t size) {
    struct sockaddr_un client_sockaddr;
    unsigned int len = sizeof(client_sockaddr);
@@ -131,3 +132,4 @@ static void fcgi_serve_response(int listen_sock, const char *response, size_t si
 
    close(client_sock);
 }
+*/

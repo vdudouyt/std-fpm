@@ -14,13 +14,11 @@ set(SOURCE_FILES
    src/fcgi_parser.c
    src/fcgitypes.c
    src/log.c
-   src/buf.c
    src/process_pool.c
    src/fcgi_process.c
    src/fd_ctx.c
    src/fdutils.c
    src/debug_utils.c
-   src/fcgi_writer.c
    src/config.c)
 
 if(DEBUG_LOG)

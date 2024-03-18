@@ -1,5 +1,4 @@
 #pragma once
-#include "buf.h"
 #include "fcgi_process.h"
 #include "fcgi_parser.h"
 #include "fcgi_params_parser.h"
@@ -21,7 +20,6 @@ struct fd_ctx_s {
    char name[64];
    #endif
 
-   buf_t *memBuf;
    fcgi_client_t *client;
    fcgi_process_t *process;
 };
