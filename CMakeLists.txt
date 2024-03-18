@@ -31,7 +31,7 @@ add_compile_options(-std=gnu99 -Wpointer-sign)
 add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER})
-target_link_libraries(std-fpm ${GLIB_LIBRARIES})
+target_link_libraries(std-fpm ${GLIB_LIBRARIES} -levent)
 
 set(CMAKE_INSTALL_PREFIX "")
 install(TARGETS std-fpm DESTINATION usr/sbin/)
