@@ -209,6 +209,7 @@ int main(int argc, char **argv) {
    signal(SIGCHLD, SIG_IGN);
 
    struct event_base *base = event_base_new();
+   pool_start_inactivity_detector(base);
    struct evconnlistener *listener = stdfpm_create_listener(base, cfg->listen);
    event_base_dispatch(base);
    event_base_free(base);

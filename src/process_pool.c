@@ -22,6 +22,8 @@ static unsigned int startup_counter = 0;
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
 static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
 static fcgi_process_t *pool_create_process(struct event_base *base, const char *path);
+static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
+static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
 
 bool pool_init(const char *path) {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -37,21 +39,21 @@ fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
    if(!g_hash_table_contains(process_pool, path)) {
       char *newkey = strdup(path);
       if(!newkey) RETURN_ERROR("[process pool] strdup failed");
-      g_hash_table_insert(process_pool, newkey, NULL);
+      GQueue *q = g_queue_new();
+      if(!q) RETURN_ERROR("[process_pool] queue allocation failed");
+      g_hash_table_insert(process_pool, newkey, q);
    }
 
    fcgi_process_t *proc = pool_borrow_existing_process(base, path);
    if(!proc) proc = pool_create_process(base, path);
-   if(proc) proc->last_used = time(NULL);
-
    return proc;
 }
 
 void pool_release_process(fcgi_process_t *proc) {
    DEBUG("[process pool] Releasing process %d to bucket %s", proc->pid, proc->filepath);
-   GList *bucket = g_hash_table_lookup(process_pool, proc->filepath);
-   bucket = g_list_prepend(bucket, proc);
-   g_hash_table_insert(process_pool, proc->filepath, bucket);
+   proc->last_used = time(NULL);
+   GQueue *q = g_hash_table_lookup(process_pool, proc->filepath);
+   g_queue_push_head(q, proc);
 }
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {
@@ -78,25 +80,17 @@ static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) 
 }
 
 static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path) {
-   GList *bucket = g_hash_table_lookup(process_pool, path);
-   fcgi_process_t *proc = NULL;
+   GQueue *q = g_hash_table_lookup(process_pool, path);
+   fcgi_process_t *proc;
 
-   while(bucket != NULL) {
-      GList *next = bucket->next;
-      proc = bucket->data;
-      bucket = g_list_delete_link(bucket, bucket);
-      bucket = next;
-
+   while(proc = g_queue_pop_head(q)) {
       if(pool_connect_process(base, proc)) {
-         break;
-      } else {
-         free(proc);
-         proc = NULL;
+         return proc;
       }
+      free(proc);
    }
 
-   g_hash_table_insert(process_pool, (char *) path, bucket);
-   return proc;
+   return NULL;
 }
 
 static fcgi_process_t *pool_create_process(struct event_base *base, const char *path) {
@@ -114,28 +108,31 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
    }
 }
 
-static void pool_hash_function(gpointer key, gpointer value, gpointer user_data);
-
-void pool_shutdown_inactive_processes(unsigned int max_idling_time) {
-   g_hash_table_foreach(process_pool, pool_hash_function, &max_idling_time);
+void pool_start_inactivity_detector(struct event_base *base) {
+    struct timeval interval = { 1, 0 };
+    struct event *ev = event_new(base, -1, EV_PERSIST, pool_shutdown_inactive_processes, NULL);
+    event_add(ev, &interval);
 }
 
-static void pool_hash_function(gpointer key, gpointer value, gpointer user_data) {
+static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg) {
+   DEBUG("pool_shutdown_inactive_processes()");
+   unsigned int max_idling_time = 60;
+   g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &max_idling_time);
+}
+
+static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data) {
    unsigned int max_idling_time = *(unsigned int*) user_data;
-   GList *bucket = value;
-   GList *it = bucket;
+   GQueue *q = value;
+   fcgi_process_t *proc;
    time_t curtime = time(NULL);
 
-   while(it != NULL) {
-      GList *next = it->next;
-      fcgi_process_t *proc = it->data;
-      if(curtime - proc->last_used >= max_idling_time) {
-         DEBUG("[process pool] removing idling process: %s", key);
-         kill(proc->pid, SIGTERM);
-         free(proc);
-         bucket = g_list_delete_link(bucket, it);
+   while(proc = g_queue_peek_tail(q)) {
+      if(curtime - proc->last_used < max_idling_time) {
+         break;
       }
-      it = next;
+      DEBUG("[process pool] removing idle process: %s", key);
+      kill(proc->pid, SIGTERM);
+      free(proc);
+      g_queue_pop_tail(q);
    }
-   g_hash_table_insert(process_pool, key, bucket);
 }
