@@ -7,7 +7,6 @@
 #include <gmodule.h>
 #include <unistd.h>
 #include <event2/bufferevent.h>
-#include <assert.h>
 #include "fdutils.h"
 #include "log.h"
 #include "debug.h"
@@ -58,7 +57,10 @@ void pool_release_process(fcgi_process_t *proc) {
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {
 	struct bufferevent *bev = bufferevent_socket_new(base, -1,
 	    BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
-   assert(bev);
+   if(!bev) {
+      log_write("bufferevent initialization failed");
+      return false;
+   }
 	if(bufferevent_socket_connect(bev, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
 		perror("bufferevent_socket_connect");
 		bufferevent_free(bev);
