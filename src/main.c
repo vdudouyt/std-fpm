@@ -21,7 +21,9 @@
 #include "fcgitypes.h"
 #include "debug_utils.h"
 #include "process_pool.h"
+#include "config.h"
 
+static stdfpm_config_t *cfg = NULL;
 static struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path);
 static void stdfpm_accept_conn(struct evconnlistener *listener, evutil_socket_t fd,
     struct sockaddr *a, int slen, void *p);
@@ -32,7 +34,9 @@ static void stdfpm_disconnect(fd_ctx_t *ctx);
 
 static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
 static void onfcgiparam(const char *key, const char *value, void *userdata);
-bool stdfpm_allowed_extension(const char *filename, char **extensions);
+static bool stdfpm_allowed_extension(const char *filename, char **extensions);
+
+#define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
 static struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path) {
    struct sockaddr_un s_un;
@@ -185,11 +189,24 @@ static void stdfpm_disconnect(fd_ctx_t *ctx) {
    fd_ctx_free(ctx);
 }
 
-int main() {
+int main(int argc, char **argv) {
    log_set_echo(true);
-   pool_init("/tmp/std-fpm/pool/");
+
+   cfg = stdfpm_read_config(argc, argv);
+   if(!cfg) EXIT_WITH_ERROR("Read config failed: %s", strerror(errno));
+   if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
+
+   if(cfg->gid > 0 && setgid(cfg->gid) == -1) EXIT_WITH_ERROR("Couldn't set process gid: %s", strerror(errno));
+   if(cfg->uid > 0 && setuid(cfg->uid) == -1) EXIT_WITH_ERROR("Couldn't set process uid: %s", strerror(errno));
+   if(!pool_init(cfg->pool)) EXIT_WITH_ERROR("Pool initialization failed (failed malloc?)");
+
+   if(!cfg->foreground) {
+      log_set_echo(false);
+      if(daemon(0, 0) != 0) EXIT_WITH_ERROR("Couldn't daemonize");
+   }
+
    struct event_base *base = event_base_new();
-   struct evconnlistener *listener = stdfpm_create_listener(base, "/tmp/std-fpm.sock");
+   struct evconnlistener *listener = stdfpm_create_listener(base, cfg->listen);
    event_base_dispatch(base);
    event_base_free(base);
 }
