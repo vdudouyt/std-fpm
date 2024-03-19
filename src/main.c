@@ -6,6 +6,7 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
@@ -203,6 +204,9 @@ int main(int argc, char **argv) {
       log_set_echo(false);
       if(daemon(0, 0) != 0) EXIT_WITH_ERROR("Couldn't daemonize");
    }
+
+   signal(SIGPIPE, SIG_IGN);
+   signal(SIGCHLD, SIG_IGN);
 
    struct event_base *base = event_base_new();
    struct evconnlistener *listener = stdfpm_create_listener(base, cfg->listen);

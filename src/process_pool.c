@@ -55,17 +55,23 @@ void pool_release_process(fcgi_process_t *proc) {
 }
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {
-	struct bufferevent *bev = bufferevent_socket_new(base, -1,
-	    BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
-   if(!bev) {
-      log_write("bufferevent initialization failed");
+   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+   if(fd == -1) return false;
+   if(connect(fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
+      close(fd);
       return false;
    }
-	if(bufferevent_socket_connect(bev, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
-		perror("bufferevent_socket_connect");
-		bufferevent_free(bev);
-		return false;
-	}
+   fd_setnonblocking(fd);
+   fd_setcloseonexec(fd);
+
+   struct bufferevent *bev = bufferevent_socket_new(base, fd,
+      BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
+
+   if(!bev) {
+      log_write("bufferevent allocation failed");
+      return false;
+   }
+
    DEBUG("[process pool] opened connection to %s", proc->s_un.sun_path);
    proc->bev = bev;
    return true;
