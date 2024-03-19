@@ -10,7 +10,7 @@ struct fcgi_process_s {
 	char filepath[4096];
 	struct sockaddr_un s_un;
    pid_t pid;
-   int fd;
+   struct bufferevent *bev;
    time_t last_used;
 };
 

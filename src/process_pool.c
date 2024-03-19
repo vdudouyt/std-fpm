@@ -6,6 +6,8 @@
 #include <string.h>
 #include <gmodule.h>
 #include <unistd.h>
+#include <event2/bufferevent.h>
+#include <assert.h>
 #include "fdutils.h"
 #include "log.h"
 #include "debug.h"
@@ -18,9 +20,9 @@ static char *pool_path = NULL;
 static GHashTable *process_pool = NULL;
 static unsigned int startup_counter = 0;
 
-static bool pool_connect_process(fcgi_process_t *proc);
-static fcgi_process_t *pool_borrow_existing_process(const char *path);
-static fcgi_process_t *pool_create_process(const char *path);
+static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
+static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
+static fcgi_process_t *pool_create_process(struct event_base *base, const char *path);
 
 bool pool_init(const char *path) {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -32,15 +34,15 @@ bool pool_init(const char *path) {
    return true;
 }
 
-fcgi_process_t *pool_borrow_process(const char *path) {
+fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
    if(!g_hash_table_contains(process_pool, path)) {
       char *newkey = strdup(path);
       if(!newkey) RETURN_ERROR("[process pool] strdup failed");
       g_hash_table_insert(process_pool, newkey, NULL);
    }
 
-   fcgi_process_t *proc = pool_borrow_existing_process(path);
-   if(!proc) proc = pool_create_process(path);
+   fcgi_process_t *proc = pool_borrow_existing_process(base, path);
+   if(!proc) proc = pool_create_process(base, path);
    if(proc) proc->last_used = time(NULL);
 
    return proc;
@@ -51,25 +53,23 @@ void pool_release_process(fcgi_process_t *proc) {
    GList *bucket = g_hash_table_lookup(process_pool, proc->filepath);
    bucket = g_list_prepend(bucket, proc);
    g_hash_table_insert(process_pool, proc->filepath, bucket);
-   close(proc->fd);
 }
 
-static bool pool_connect_process(fcgi_process_t *proc) {
-   proc->fd = socket(AF_UNIX, SOCK_STREAM, 0);
-   if(proc->fd == -1) return false;
-   if(connect(proc->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
-      close(proc->fd);
-      return false;
-   }
-   fd_setnonblocking(proc->fd);
-   fd_setcloseonexec(proc->fd);
+static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {
+	struct bufferevent *bev = bufferevent_socket_new(base, -1,
+	    BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
+   assert(bev);
+	if(bufferevent_socket_connect(bev, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
+		perror("bufferevent_socket_connect");
+		bufferevent_free(bev);
+		return false;
+	}
    DEBUG("[process pool] opened connection to %s", proc->s_un.sun_path);
+   proc->bev = bev;
    return true;
 }
 
-// TODO: free dead processes
-
-static fcgi_process_t *pool_borrow_existing_process(const char *path) {
+static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path) {
    GList *bucket = g_hash_table_lookup(process_pool, path);
    fcgi_process_t *proc = NULL;
 
@@ -79,7 +79,7 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
       bucket = g_list_delete_link(bucket, bucket);
       bucket = next;
 
-      if(pool_connect_process(proc)) {
+      if(pool_connect_process(base, proc)) {
          break;
       } else {
          free(proc);
@@ -91,14 +91,14 @@ static fcgi_process_t *pool_borrow_existing_process(const char *path) {
    return proc;
 }
 
-static fcgi_process_t *pool_create_process(const char *path) {
+static fcgi_process_t *pool_create_process(struct event_base *base, const char *path) {
    char socket_path[4096];
    startup_counter++;
-   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d-%d.sock", pool_path, getpid(), startup_counter);
+   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, startup_counter);
 
    fcgi_process_t *proc = fcgi_spawn(socket_path, path);
    if(!proc) return NULL;
-   if(pool_connect_process(proc)) {
+   if(pool_connect_process(base, proc)) {
       return proc;
    } else {
       free(proc);
