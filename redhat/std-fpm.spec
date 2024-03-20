@@ -7,7 +7,7 @@ License:        0BSD
 URL:            https://github.com/vdudouyt/%{name}
 Source:         %{expand:%%(pwd)}
 
-BuildRequires:  gcc, cmake, glib2-devel
+BuildRequires:  gcc, cmake, libevent-devel, glib2-devel
 
 %description
 A language-agnostic FastCGI process manager
