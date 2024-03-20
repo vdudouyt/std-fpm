@@ -1,5 +1,5 @@
 Name:           std-fpm
-Version:        0.1
+Version:        0.2
 Release:        1%{?dist}
 Summary:        A language-agnostic FastCGI process manager
 
@@ -33,5 +33,8 @@ sed -i s/www-data/nobody/ conf/std-fpm.conf
 %attr(0755,nobody,nobody) %dir /run/std-fpm/pool/
 
 %changelog
+* Sat Mar 20 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.2-libevent
+- v0.2-libevent
+
 * Sat Mar 09 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.1-1
 - First std-fpm package
