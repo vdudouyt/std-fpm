@@ -8,15 +8,13 @@
 #include <errno.h>
 #include <libgen.h>
 #include "log.h"
-//#include "buf.h"
-//#include "fcgi_writer.h"
+#include "fcgi_writer.h"
 #include "fcgitypes.h"
 #include "debug.h"
 
-//static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
-
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
+static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
 static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename);
 
 fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
@@ -98,7 +96,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
             snprintf(response, sizeof(response), "Status: 500\nContent-type: text/html\n\nStartup error: %s(%d)", strerror(errno), errno);
       }
 
-      //fcgi_serve_response(listen_sock, response, strlen(response));
+      fcgi_serve_response(listen_sock, response, strlen(response));
       close(listen_sock);
       close(STDIN_FILENO);
       unlink(ret->s_un.sun_path);
@@ -110,7 +108,6 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    }
 }
 
-/*
 static void fcgi_serve_response(int listen_sock, const char *response, size_t size) {
    struct sockaddr_un client_sockaddr;
    unsigned int len = sizeof(client_sockaddr);
@@ -122,28 +119,23 @@ static void fcgi_serve_response(int listen_sock, const char *response, size_t si
       return;
    }
 
-   // TODO: read incoming FastCGI messages
    DEBUG("[fastcgi spawner] socket accepted");
 
-   buf_t outBuf;
-   buf_reset(&outBuf);
-   fcgi_write_buf(&outBuf, 1, FCGI_STDOUT, response, size);
-   fcgi_write_buf(&outBuf, 1, FCGI_STDOUT, "", 0);
-   fcgi_write_buf(&outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+   struct evbuffer *outBuf = evbuffer_new();
 
-   size_t bytes_remaining = buf_bytes_remaining(&outBuf);
-
-   char *buf = outBuf.data;
-   while(bytes_remaining > 0) {
-      int wr = write(client_sock, buf, bytes_remaining);
-      if(wr <= 0) break;
-      bytes_remaining -= wr;
-      buf = &buf[wr];
+   if(!outBuf) {
+      log_write("[fastcgi spawner] failed to allocate outBuf for error output");
+      return;
    }
 
+   fcgi_write_buf(outBuf, 1, FCGI_STDOUT, response, size);
+   fcgi_write_buf(outBuf, 1, FCGI_STDOUT, "", 0);
+   fcgi_write_buf(outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
+   evbuffer_write(outBuf, client_sock);
+
+   evbuffer_free(outBuf);
    close(client_sock);
 }
-*/
 
 static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename) {
    char *sep = strrchr(path, '/');

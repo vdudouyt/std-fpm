@@ -16,6 +16,7 @@ set(SOURCE_FILES
    src/log.c
    src/process_pool.c
    src/fcgi_process.c
+   src/fcgi_writer.c
    src/fd_ctx.c
    src/fdutils.c
    src/debug_utils.c
