@@ -19,6 +19,7 @@ location ~ \.fcgi$ {
 
 ### Apache (through *mod_proxy_fcgi*)
 ```nohighlight
+$ a2dismod fcgid # or untie .fcgi handler in Apache configuration
 $ a2enmod proxy_fcgi
 ```
 
