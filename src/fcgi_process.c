@@ -17,6 +17,8 @@
 
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
+static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename);
+
 fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    DEBUG("[fastcgi spawner] spawning new process: %s", path);
 
@@ -60,21 +62,26 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    } else if(pid == 0) {
       free(ret);
 
-      char *pathname_copy = strdup(path);
-      char *directory_path = pathname_copy ? dirname(pathname_copy) : NULL;
-      if(directory_path) {
-         if(chdir(directory_path) != 0) log_write("[process pool] failed to chdir: %s", directory_path);
-      }
-      free(directory_path);
+      char *dirpath, *basename, *rel_basename;
+      parse_path(path, &dirpath, &basename, &rel_basename);
+      DEBUG("Parsed path: path = %s, dirpath = %s, basename = %s, rel_basename = %s", path, dirpath, basename, rel_basename);
 
-      char *filename = strrchr(path, '/');
-      if(filename && filename > path) filename--;
-      filename[0] = '.';
+      if(!basename || !rel_basename) {
+         log_write("[fcgi_process] strdup failed");
+         return NULL;
+      }
+
+      if(dirpath) {
+         if(chdir(dirpath) != 0) log_write("[process pool] failed to chdir: %s", dirpath);
+      }
+
+      free(dirpath);
+      free(basename);
 
       dup2(listen_sock, STDIN_FILENO);
-      char *argv[] = { (char*) filename, NULL };
+      char *argv[] = { (char*) rel_basename, NULL };
       prctl(PR_SET_PDEATHSIG, SIGHUP); // terminate if parent process exits
-      execv(filename, argv);
+      execv(rel_basename, argv);
 
       // execve failed, send error response to std-fpm worker and terminate
       log_write("[fastcgi spawner] failed to start %s: %s", path, strerror(errno));
@@ -137,3 +144,18 @@ static void fcgi_serve_response(int listen_sock, const char *response, size_t si
    close(client_sock);
 }
 */
+
+static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename) {
+   char *sep = strrchr(path, '/');
+   if(sep) {
+      *dirname = strndup(path, sep - path + 1);
+      *basename = strdup(sep + 1);
+   } else {
+      *basename = strdup(path);
+      *dirname = NULL;
+   }
+   if(*basename && (*rel_basename = malloc(strlen(*basename) + 3))) {
+      strcpy(*rel_basename, "./");
+      strcat(*rel_basename, *basename);
+   }
+}
