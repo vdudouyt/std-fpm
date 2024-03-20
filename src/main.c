@@ -97,7 +97,7 @@ static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr) {
    size_t remains = evbuffer_get_length(dst);
    DEBUG("[%s] write completed, %d bytes remains in buffer. pipeTo = %08x", ctx->name, remains, ctx->pipeTo);
    if(ctx->closeAfterWrite && !remains) {
-      DEBUG("[%s] disconnecting by closeAfterWrite");
+      DEBUG("[%s] disconnecting by closeAfterWrite", ctx->name);
       stdfpm_disconnect(ctx);
    }
 }
@@ -178,7 +178,7 @@ static void stdfpm_disconnect(fd_ctx_t *ctx) {
       size_t remains = evbuffer_get_length(dst);
       if(remains > 0) {
          DEBUG("[%s] partner %s has %d bytes remaining to write", ctx->name, ctx->pipeTo->name, remains);
-         ctx->closeAfterWrite = true;
+         ctx->pipeTo->closeAfterWrite = true;
       } else {
          DEBUG("[%s] partner %s has %d bytes remaining to write, disconnecting it", ctx->name, ctx->pipeTo->name, remains);
          stdfpm_disconnect(ctx->pipeTo);
