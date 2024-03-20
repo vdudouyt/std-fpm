@@ -109,7 +109,7 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
 }
 
 void pool_start_inactivity_detector(struct event_base *base) {
-    struct timeval interval = { 1, 0 };
+    struct timeval interval = { 60, 0 };
     struct event *ev = event_new(base, -1, EV_PERSIST, pool_shutdown_inactive_processes, NULL);
     event_add(ev, &interval);
 }
