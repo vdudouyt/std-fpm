@@ -5,6 +5,7 @@ option(DEBUG_LOG "Produce debug log" OFF)
 project(std-fpm C)
 find_package(PkgConfig REQUIRED)
 pkg_search_module(GLIB REQUIRED glib-2.0)
+pkg_search_module(LIBEVENT REQUIRED libevent)
 include_directories(${GLIB_INCLUDE_DIRS})
 link_directories(${GLIB_LIBRARY_DIRS})
 
@@ -28,8 +29,8 @@ endif(DEBUG_LOG)
 add_compile_options(-std=gnu99 -Wpointer-sign)
 add_executable(std-fpm ${SOURCE_FILES})
 
-add_definitions(${GLIB_CFLAGS_OTHER})
-target_link_libraries(std-fpm ${GLIB_LIBRARIES} -levent)
+add_definitions(${GLIB_CFLAGS_OTHER} ${GLIB_CFLAGS_OTHER})
+target_link_libraries(std-fpm ${GLIB_LIBRARIES} ${LIBEVENT_LIBRARIES})
 
 set(CMAKE_INSTALL_PREFIX "")
 install(TARGETS std-fpm DESTINATION usr/sbin/)
