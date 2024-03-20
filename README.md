@@ -9,7 +9,7 @@ A language-agnostic FastCGI process manager
 
 ## Webserver configuration examples
 
-### Nginx (through *ngx_http_fastcgi_module*)
+### Nginx (through *ngx_http_fastcgi_module*, recommended)
 ```nohighlight
 location ~ \.fcgi$ {
    include fastcgi.conf;
