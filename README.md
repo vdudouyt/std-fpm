@@ -2,8 +2,8 @@ STD-FPM
 =============
 A high-performance language-agnostic FastCGI process manager
 * Highly efficient event-driven architecture based on non-blocking I/O
-* Built up on the top of [libevent](https://en.wikipedia.org/wiki/Libevent) asynchronous I/O framework, known for powering up such software as Google Chrome or Memcached
-* Starts and manages everything that supports the [FastCGI Startup Protocol](https://www.mit.edu/~yandros/doc/specs/fcgi-spec.html#S2.2) (take a look at available [examples](/examples/))
+* Built on the top of [libevent](https://en.wikipedia.org/wiki/Libevent), known for powering such software as Google Chrome or [Memcached](https://en.wikipedia.org/wiki/Memcached)
+* Starts and manages everything that supports the [FastCGI Startup Protocol](https://www.mit.edu/~yandros/doc/specs/fcgi-spec.html#S2.2) (refer to available [examples](/examples/))
 * Dynamically controls FastCGI process population depending on incoming traffic patterns
 * Compatible with the most of HTTP server software available
 * Almost no configuration required
