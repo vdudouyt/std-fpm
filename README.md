@@ -10,7 +10,7 @@ A high-performance language-agnostic FastCGI process manager
 
 ## Webserver configuration examples
 
-### Nginx (through *ngx_http_fastcgi_module*)
+### Nginx
 Nginx is a recommended way to run ``std-fpm``. Configuring it up is as easy as adding the following lines into your nginx.conf (in the fact, it is not different from PHP-FPM configuration):
 ```nohighlight
 location ~ \.fcgi$ {
