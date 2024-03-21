@@ -20,7 +20,7 @@ location ~ \.fcgi$ {
 ```
 
 ### Apache (through *mod_proxy_fcgi*)
-Unlike for the native ``mod_fcgid``, ``std-fpm`` is completely free from that nasty *can't apply process slot* problem and can be easily used as a drop-in replacement (or in the environments where enabling ``mod_fcgid`` is complicated):
+STD-FPM is completely free from that nasty ``can't apply process slot`` problem and can be easily used as a drop-in replacement, or in the environments where enabling ``mod_fcgid`` is complicated:
 ```nohighlight
 $ a2dismod fcgid # or untie .fcgi handler in Apache configuration
 $ a2enmod proxy_fcgi
