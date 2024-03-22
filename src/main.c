@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 
    worker_t **workers = calloc(cfg->worker_threads, sizeof(worker_t*));
    if(!workers) EXIT_WITH_ERROR("Failed to allocate workers pool: %s", strerror(errno));
-   if(!cfg->worker_threads) cfg->worker_threads = 1;
+   if(cfg->worker_threads <= 0) EXIT_WITH_ERROR("worker_threads count should be greated than zero");
 
    for(unsigned int i = 0; i < cfg->worker_threads; i++) {
       workers[i] = start_worker(stdfpm_socket_accepted_cb);
