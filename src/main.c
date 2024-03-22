@@ -27,7 +27,7 @@
 
 static stdfpm_config_t *cfg = NULL;
 
-#define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
+#define EXIT_WITH_ERROR(...) { log_write(__VA_ARGS__); exit(-1); }
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -53,9 +53,6 @@ static int stdfpm_create_listening_socket(const char *sock_path) {
    return listen_sock;
 }
 
-#define THREAD_COUNT 8
-worker_t *workers[THREAD_COUNT];
-
 int main(int argc, char **argv) {
    log_set_echo(true);
 
@@ -75,9 +72,11 @@ int main(int argc, char **argv) {
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
 
-   int listen_sock = stdfpm_create_listening_socket(cfg->listen);
+   worker_t **workers = calloc(cfg->worker_threads, sizeof(worker_t*));
+   if(!workers) EXIT_WITH_ERROR("Failed to allocate workers pool: %s", strerror(errno));
+   if(!cfg->worker_threads) cfg->worker_threads = 1;
 
-   for(unsigned int i = 0; i < THREAD_COUNT; i++) {
+   for(unsigned int i = 0; i < cfg->worker_threads; i++) {
       workers[i] = start_worker(stdfpm_socket_accepted_cb);
       workers[i]->config = cfg;
    }
@@ -86,6 +85,8 @@ int main(int argc, char **argv) {
    unsigned int len = sizeof(client_sockaddr);
    unsigned int ctr = 0;
 
+   int listen_sock = stdfpm_create_listening_socket(cfg->listen);
+
    while (1) {
       int fd = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);
       if(fd == -1)  {
@@ -93,7 +94,7 @@ int main(int argc, char **argv) {
          continue;
       }
       DEBUG("Dispatcher: connection accepted: %d", fd);
-      unsigned int tid = (ctr++) % THREAD_COUNT;
+      unsigned int tid = (ctr++) % cfg->worker_threads;
 
       worker_t *worker = workers[tid];
       pthread_mutex_lock(&worker->conn_queue_mutex);
