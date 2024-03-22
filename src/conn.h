@@ -8,7 +8,7 @@
 #include "fcgi_params_parser.h"
 #include "worker.h"
 
-typedef struct fd_ctx_s fd_ctx_t;
+typedef struct conn_s conn_t;
 typedef struct fcgi_client_s fcgi_client_t;
 
 struct fcgi_client_s {
@@ -17,11 +17,11 @@ struct fcgi_client_s {
    struct evbuffer *inMemoryBuf;
 };
 
-struct fd_ctx_s {
+struct conn_s {
    worker_t *worker;
    struct bufferevent *bev;
    enum { STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
-   struct fd_ctx_s *pipeTo;
+   struct conn_s *pipeTo;
    bool closeAfterWrite;
 
    #ifdef DEBUG_LOG
@@ -32,11 +32,11 @@ struct fd_ctx_s {
    fcgi_process_t *process;
 };
 
-fd_ctx_t *fd_ctx_new(struct bufferevent *bev, int type);
-void fd_ctx_set_name(fd_ctx_t *this, const char *fmt, ...);
-void fd_ctx_free(fd_ctx_t *this);
+conn_t *conn_new(struct bufferevent *bev, int type);
+void conn_set_name(conn_t *this, const char *fmt, ...);
+void conn_free(conn_t *this);
 
-fd_ctx_t *fd_ctx_client_accept(fd_ctx_t *listener);
-fd_ctx_t *fd_new_client_ctx(struct bufferevent *bev);
-fd_ctx_t *fd_new_process_ctx(fcgi_process_t *proc);
-void fd_ctx_bidirectional_pipe(fd_ctx_t *ctx1, fd_ctx_t *ctx2);
+conn_t *conn_client_accept(conn_t *listener);
+conn_t *fd_new_client_conn(struct bufferevent *bev);
+conn_t *fd_new_process_conn(fcgi_process_t *proc);
+void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2);

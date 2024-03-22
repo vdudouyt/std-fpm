@@ -20,7 +20,7 @@ set(SOURCE_FILES
    src/fcgi_process.c
    src/fcgi_writer.c
    src/fcgitypes.c
-   src/fd_ctx.c
+   src/conn.c
    src/fdutils.c
    src/debug_utils.c
    src/config.c)

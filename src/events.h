@@ -1,5 +1,5 @@
 #pragma once
 #include "worker.h"
-#include "fd_ctx.h"
+#include "conn.h"
 
 void stdfpm_socket_accepted_cb(worker_t *worker, int fd);

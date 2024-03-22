@@ -20,13 +20,13 @@ void fcgi_write_buf(struct evbuffer *outBuf, unsigned int requestId, unsigned in
    evbuffer_add(outBuf, padding, paddingLength);
 }
 
-void fcgi_send_response(fd_ctx_t *ctx, const char *response, size_t size) {
+void fcgi_send_response(conn_t *conn, const char *response, size_t size) {
    DEBUG("fcgi_send_response");
-   struct evbuffer *dst = bufferevent_get_output(ctx->bev);
+   struct evbuffer *dst = bufferevent_get_output(conn->bev);
    fcgi_write_buf(dst, 1, FCGI_STDOUT, response, size);
    fcgi_write_buf(dst, 1, FCGI_STDOUT, "", 0);
    fcgi_write_buf(dst, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
-   ctx->closeAfterWrite = true;
+   conn->closeAfterWrite = true;
 }
 
 void fcgi_serve_response(int listen_sock, const char *response, size_t size) {

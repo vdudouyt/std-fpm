@@ -15,7 +15,7 @@
 
 #include "log.h"
 #include "debug.h"
-#include "fd_ctx.h"
+#include "conn.h"
 #include "fcgi_parser.h"
 #include "fcgi_params_parser.h"
 #include "fcgitypes.h"
