@@ -7,7 +7,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include <assert.h>
 
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
@@ -97,6 +96,9 @@ int main(int argc, char **argv) {
       pthread_mutex_lock(&worker->conn_queue_mutex);
       g_queue_push_head(worker->conn_queue, GINT_TO_POINTER(fd));
       pthread_mutex_unlock(&worker->conn_queue_mutex);
-      assert(write(worker->notify_send_fd, "C", 1) == 1);
+
+      if(write(worker->notify_send_fd, "C", 1) != 1) {
+         log_write("Worker %d wakeup pipe write failed: %s", worker->tid, strerror(errno));
+      }
    }
 }

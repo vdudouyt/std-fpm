@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <assert.h>
 #include "fdutils.h"
 #include "worker.h"
+#include "log.h"
 
 static void *worker(void *ptr);
 static void worker_socket_accepted_cb(int pipefd, short which, void *arg);
@@ -33,7 +33,10 @@ worker_t *start_worker(socket_acceptor_t acceptor_cb) {
    evutil_make_socket_nonblocking(self->notify_receive_fd);
    event_set(&self->notify_event, self->notify_receive_fd, EV_READ|EV_PERSIST, worker_socket_accepted_cb, self);
    event_base_set(self->base, &self->notify_event);
-   assert(event_add(&self->notify_event, 0) != -1);
+
+   if(event_add(&self->notify_event, 0) == -1) {
+      log_write("Worker %d is failed to setup a notification event", self->tid);
+   }
 
    pthread_create(&self->thread, NULL, worker, self);
    return self;
