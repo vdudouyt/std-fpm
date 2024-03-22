@@ -18,6 +18,7 @@
 static char *pool_path = NULL;
 static GHashTable *process_pool = NULL;
 static unsigned int startup_counter = 0;
+pthread_mutex_t pool_mutex;
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
 static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
@@ -36,15 +37,20 @@ bool pool_init(const char *path) {
 }
 
 fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
-   if(!g_hash_table_contains(process_pool, path)) {
+   if(g_hash_table_contains(process_pool, path)) {
+      pthread_mutex_lock(&pool_mutex);
+   } else {
       char *newkey = strdup(path);
       if(!newkey) RETURN_ERROR("[process pool] strdup failed");
       GQueue *q = g_queue_new();
       if(!q) RETURN_ERROR("[process_pool] queue allocation failed");
+      pthread_mutex_lock(&pool_mutex);
       g_hash_table_insert(process_pool, newkey, q);
    }
 
    fcgi_process_t *proc = pool_borrow_existing_process(base, path);
+   pthread_mutex_unlock(&pool_mutex);
+
    if(!proc) proc = pool_create_process(base, path);
    return proc;
 }
@@ -52,8 +58,10 @@ fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
 void pool_release_process(fcgi_process_t *proc) {
    DEBUG("[process pool] Releasing process %d to bucket %s", proc->pid, proc->filepath);
    proc->last_used = time(NULL);
+   pthread_mutex_lock(&pool_mutex);
    GQueue *q = g_hash_table_lookup(process_pool, proc->filepath);
    g_queue_push_head(q, proc);
+   pthread_mutex_unlock(&pool_mutex);
 }
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {

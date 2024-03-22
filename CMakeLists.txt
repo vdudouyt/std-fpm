@@ -11,12 +11,15 @@ link_directories(${GLIB_LIBRARY_DIRS})
 
 set(SOURCE_FILES 
    src/main.c
+   src/worker.c
+   src/events.c
    src/fcgi_params_parser.c
    src/fcgi_parser.c
    src/log.c
    src/process_pool.c
    src/fcgi_process.c
    src/fcgi_writer.c
+   src/fcgitypes.c
    src/fd_ctx.c
    src/fdutils.c
    src/debug_utils.c
@@ -30,7 +33,7 @@ add_compile_options(-std=gnu99 -Wpointer-sign)
 add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER} ${GLIB_CFLAGS_OTHER})
-target_link_libraries(std-fpm ${GLIB_LIBRARIES} ${LIBEVENT_LIBRARIES})
+target_link_libraries(std-fpm ${GLIB_LIBRARIES} ${LIBEVENT_LIBRARIES} -lpthread)
 
 set(CMAKE_INSTALL_PREFIX "")
 install(TARGETS std-fpm DESTINATION usr/sbin/)

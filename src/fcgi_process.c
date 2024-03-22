@@ -14,7 +14,6 @@
 
 #define RETURN_ERROR(msg) { log_write(msg); return NULL; }
 
-static void fcgi_serve_response(int listen_sock, const char *response, size_t size);
 static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename);
 
 fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
@@ -106,35 +105,6 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       close(listen_sock);
       return NULL;
    }
-}
-
-static void fcgi_serve_response(int listen_sock, const char *response, size_t size) {
-   struct sockaddr_un client_sockaddr;
-   unsigned int len = sizeof(client_sockaddr);
-
-   int client_sock = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);
-   DEBUG("Accepted client sock: sck%d", client_sock);
-   if(client_sock == -1) {
-      log_write("[fastcgi spawner] socket accept failed, unable to report an error to std-fpm worker");
-      return;
-   }
-
-   DEBUG("[fastcgi spawner] socket accepted");
-
-   struct evbuffer *outBuf = evbuffer_new();
-
-   if(!outBuf) {
-      log_write("[fastcgi spawner] failed to allocate outBuf for error output");
-      return;
-   }
-
-   fcgi_write_buf(outBuf, 1, FCGI_STDOUT, response, size);
-   fcgi_write_buf(outBuf, 1, FCGI_STDOUT, "", 0);
-   fcgi_write_buf(outBuf, 1, FCGI_END_REQUEST, "\0\0\0\0\0\0\0\0", 8);
-   evbuffer_write(outBuf, client_sock);
-
-   evbuffer_free(outBuf);
-   close(client_sock);
 }
 
 static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename) {

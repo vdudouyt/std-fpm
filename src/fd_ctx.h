@@ -6,6 +6,7 @@
 #include "fcgi_process.h"
 #include "fcgi_parser.h"
 #include "fcgi_params_parser.h"
+#include "worker.h"
 
 typedef struct fd_ctx_s fd_ctx_t;
 typedef struct fcgi_client_s fcgi_client_t;
@@ -17,6 +18,7 @@ struct fcgi_client_s {
 };
 
 struct fd_ctx_s {
+   worker_t *worker;
    struct bufferevent *bev;
    enum { STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
    struct fd_ctx_s *pipeTo;
