@@ -1,3 +1,9 @@
+std-fpm (0.2-2~libevent-mt) unstable; urgency=medium
+
+  * 0.2-2~libevent-mt
+
+ -- Valentin Dudouyt <valentin.dudouyt@gmail.com>  Fri, 22 Mar 2024 22:24:00 +0200
+
 std-fpm (0.2-libevent) unstable; urgency=medium
 
   * 0.2-libevent
