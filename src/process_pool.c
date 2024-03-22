@@ -19,12 +19,14 @@ static char *pool_path = NULL;
 static GHashTable *process_pool = NULL;
 static unsigned int startup_counter = 0;
 pthread_mutex_t pool_mutex;
+pthread_t inactivity_detector;
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
 static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
 static fcgi_process_t *pool_create_process(struct event_base *base, const char *path);
 static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
+static void *pool_rip_idling_processes(void *ptr);
 
 bool pool_init(const char *path) {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -116,16 +118,19 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
    }
 }
 
-void pool_start_inactivity_detector(struct event_base *base) {
-    struct timeval interval = { 60, 0 };
-    struct event *ev = event_new(base, -1, EV_PERSIST, pool_shutdown_inactive_processes, NULL);
-    event_add(ev, &interval);
+void pool_start_inactivity_detector() {
+   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, NULL);
 }
 
-static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg) {
-   DEBUG("pool_shutdown_inactive_processes()");
-   unsigned int max_idling_time = 60;
-   g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &max_idling_time);
+static void *pool_rip_idling_processes(void *ptr) {
+   int max_idling_time = 60;
+   while(1) {
+      DEBUG("pool_rip_idling_processes()");
+      pthread_mutex_lock(&pool_mutex);
+      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &max_idling_time);
+      pthread_mutex_unlock(&pool_mutex);
+      sleep(60);
+   }
 }
 
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data) {

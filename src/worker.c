@@ -4,6 +4,7 @@
 #include "fdutils.h"
 #include "worker.h"
 #include "log.h"
+#include "debug.h"
 
 static void *worker(void *ptr);
 static void worker_socket_accepted_cb(int pipefd, short which, void *arg);
@@ -50,10 +51,10 @@ void worker_free(worker_t *self) {
 
 static void *worker(void *ptr) {
    worker_t *self = ptr;
-   printf("Worker %d started\n", self->tid);
+   DEBUG("Worker %d started", self->tid);
    event_base_dispatch(self->base);
    event_base_free(self->base);
-   printf("Worker exited\n");
+   DEBUG("Worker exited");
 }
 
 static void worker_socket_accepted_cb(int pipefd, short which, void *arg) {
