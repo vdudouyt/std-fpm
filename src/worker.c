@@ -12,6 +12,8 @@ static int tid;
 worker_t *start_worker(socket_acceptor_t acceptor_cb) {
    int fds[2];
    if(pipe(fds) == -1) { perror("pipe"); return NULL; };
+   fd_setcloseonexec(fds[0]);
+   fd_setcloseonexec(fds[1]);
 
    worker_t *self = malloc(sizeof(worker_t));
    if(!self) return NULL;
