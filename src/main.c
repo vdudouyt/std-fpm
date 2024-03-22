@@ -88,7 +88,10 @@ int main(int argc, char **argv) {
 
    while (1) {
       int fd = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);
-      if(fd == -1) perror("accept");
+      if(fd == -1)  {
+         log_write("Dispatcher: failed while accepting connection: %s", strerror(errno));
+         continue;
+      }
       DEBUG("Dispatcher: connection accepted: %d", fd);
       unsigned int tid = (ctr++) % THREAD_COUNT;
 
