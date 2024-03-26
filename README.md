@@ -38,4 +38,4 @@ $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 **A**: STD-FPM will free the allocated resources and spawn a new one in the case of need.  
 
 **Q**: Does this software suffers from the infamous ``mod_fcgid: can't apply process slot`` problem?  
-**A**: It absolutely doesn't. This can be regarded as a motivation to use it as a drop-in replacement event with Apache.
+**A**: It absolutely doesn't. This can be regarded as a motivation to use it as a drop-in replacement even with Apache.
