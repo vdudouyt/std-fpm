@@ -32,7 +32,10 @@ $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 ```
 ## Q&A
 **Q**: Can I use long-running I/O in my .fcgi scripts?  
-**A**: Absolutely yes, our worker wouldn't be blocked by that. If a new request comes in meanwhile, it gets served with another .fcgi process, or with a new one if there's no processes left.
+**A**: Absolutely yes, this wouldn't even cause a worker thread block to occur.
 
-**Q**: What if my FastCGI process exits (e.g. by literally calling ``exit()`` or due to some runtime failure)?  
-**A**: This software isn't suffering from the infamous ``mod_fcgid: can't apply process slot for`` problem. If some .fcgi process is found dead, it just frees the resources and uses a first alive one, or starts a new one if there's no processes left. But, keeping process starts count as low as possible may be good for your performance.
+**Q**: What if my .fcgi process unexpectedly exits?   
+**A**: STD-FPM will free the allocated resources and spawn a new one in the case of need.  
+
+**Q**: Does this software suffers from the infamous ``mod_fcgid: can't apply process slot`` problem?  
+**A**: It absolutely doesn't. This can be regarded as a motivation to use it as a drop-in replacement event with Apache.
