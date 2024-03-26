@@ -32,10 +32,10 @@ $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 ```
 ## Q&A
 **Q**: Can I use long-running I/O in my .fcgi scripts?  
-**A**: Absolutely yes, this wouldn't even cause a worker thread block to occur.
+**A**: Absolutely yes, this won't cause a worker thread block to occur.   
 
 **Q**: What if my .fcgi process unexpectedly exits?   
-**A**: STD-FPM will free the allocated resources and spawn a new one in the case of need.  
+**A**: STD-FPM frees the allocated resources and spawns a new one in the case of need.  
 
 **Q**: Does this software suffers from the infamous ``mod_fcgid: can't apply process slot`` problem?  
-**A**: It absolutely doesn't. This can be regarded as a motivation to use it as a drop-in replacement even with Apache.
+**A**: It absolutely doesn't. This can be regarded as a motivation to use it as mod_fcgid replacement even with Apache.
