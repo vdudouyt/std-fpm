@@ -39,3 +39,7 @@ $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 
 **Q**: Does this software suffers from the infamous ``mod_fcgid: can't apply process slot`` problem?  
 **A**: It absolutely doesn't. This can be regarded as a motivation to use it as mod_fcgid replacement even with Apache.
+
+## Comparison with the similar software
+* **PHP-FPM**: PHP-FPM is a great and mature piece of software on which STD-FPM is ideologically based. The only problem is that, just as it's name suggests, it's designed to only run the PHP scripts. By contrary, STD-FPM is designed to run everything that supports FastCGI startup protocol (just as **mod_fcgid** or **spawn-fcgi**)
+* **Apache mod_fcgid**: mod_fcgid is designed to only run with Apache webserver. STD-FPM can run with everything that can run with PHP-FPM (including but not limited to Nginx). Another concern is that mod_fcgid is infamously known for rapid performance degrade in the scenario where .fcgi handlers are performing some long-running I/O operations or unexpectedly exiting. By contrast, STD-FPM is designed to tolerate that.
