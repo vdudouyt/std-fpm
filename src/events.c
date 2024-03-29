@@ -26,6 +26,7 @@ void stdfpm_socket_accepted_cb(worker_t *worker, int fd) {
    conn->client->params_parser->callback = onfcgiparam;
 
    bufferevent_setcb(bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, conn);
+   bufferevent_setwatermark(bev, EV_READ, 0, worker->config->rd_high_watermark);
    bufferevent_enable(bev, EV_READ|EV_WRITE);
 }
 

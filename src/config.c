@@ -65,10 +65,12 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    cfg->extensions   = g_key_file_get_string_list(localini, "global", "extensions", NULL, NULL);
    cfg->worker_threads = g_key_file_get_integer(localini, "global", "worker_threads", &error);
    cfg->process_idle_timeout = parse_time(g_key_file_get_string(localini, "global", "process_idle_timeout", &error));
+   cfg->rd_high_watermark = parse_size(g_key_file_get_string(localini, "global", "rd_high_watermark", &error));
 
    if(!cfg->listen) SHOW_ERROR_AND_EXIT("[config] listen not specified");
    if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");
    if(!cfg->process_idle_timeout) SHOW_ERROR_AND_EXIT("[config] process_idle_timeout not specified");
+   if(!cfg->rd_high_watermark) SHOW_ERROR_AND_EXIT("[config] rd_high_watermark not specified");
 
    return cfg;
 }
