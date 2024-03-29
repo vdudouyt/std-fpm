@@ -118,18 +118,18 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
    }
 }
 
-void pool_start_inactivity_detector() {
-   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, NULL);
+void pool_start_inactivity_detector(unsigned int process_idle_timeout) {
+   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, GINT_TO_POINTER(process_idle_timeout));
 }
 
 static void *pool_rip_idling_processes(void *ptr) {
-   int max_idling_time = 60;
+   unsigned int process_idle_timeout = GPOINTER_TO_INT(ptr);
    while(1) {
       DEBUG("pool_rip_idling_processes()");
       pthread_mutex_lock(&pool_mutex);
-      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &max_idling_time);
+      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &process_idle_timeout);
       pthread_mutex_unlock(&pool_mutex);
-      sleep(60);
+      sleep(process_idle_timeout >= 60 ? 60 : 1);
    }
 }
 

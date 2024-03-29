@@ -12,7 +12,8 @@ typedef struct {
    char **extensions;
 
    bool foreground;
-   int worker_threads;
+   unsigned int worker_threads;
+   unsigned int process_idle_timeout;
 } stdfpm_config_t;
 
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv);
