@@ -12,6 +12,7 @@ struct fcgi_process_s {
    pid_t pid;
    struct bufferevent *bev;
    time_t last_used;
+   unsigned int socket_id;
 };
 
 fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path);
