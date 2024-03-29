@@ -41,5 +41,10 @@ $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 **A**: It absolutely doesn't. This can be regarded as a motivation to use it as mod_fcgid replacement even with Apache.
 
 ## Comparison with the similar software
-* **PHP-FPM**: PHP-FPM is a great and mature piece of software on which STD-FPM is ideologically based. The only problem is that, just as it's name suggests, it's designed to only run the PHP scripts. By contrary, STD-FPM is designed to run everything that supports FastCGI startup protocol (just as **mod_fcgid** or **spawn-fcgi**)
-* **Apache mod_fcgid**: mod_fcgid is designed to only run with Apache webserver. STD-FPM can run with everything that can run with PHP-FPM (including but not limited to Nginx). Another concern is that mod_fcgid is infamously known for rapid performance degrade in the scenario where .fcgi handlers are performing some long-running I/O operations or unexpectedly exiting. By contrast, STD-FPM is designed to tolerate that.
+**PHP-FPM** is a great piece of software on which STD-FPM is ideologically based. But, just as it's name suggests, it's designed to only run the PHP scripts. By contrary, STD-FPM is designed to run everything that supports FastCGI startup protocol (just as mod_fcgid or spawn-fcgi).  
+
+**Mod_fcgid** is designed as a part of Apache webserver. Rather that, STD-FPM can run with everything that runs with PHP-FPM. In addition to that. mod_fcgid is infamously known for rapid performance degrade under the circumstances when .fcgi handlers are performing some long-running I/O operations, or unexpectedly exiting. By contrast, STD-FPM is designed to completely tolerate that.  
+
+**Spawn-fcgi** spawns a preconfigured number of predefined .fcgi handler instances, then binds to a listener port. STD-FPM gets a SCRIPT_FILENAME from downstream HTTP server just as PHP-FPM does, then dynamically controls a population of automatically spawned .fcgi handlers just as mod_fcgi does.  
+
+**Puskach** ([link](http://falstart.com/puskach/docs/nginx_perl.html)) was an early attempt to built up something like STD-FPM from the different developers. As per my experience, it had some real software maturity problems. Also, it was single-threaded and using an O(n) descriptor polling method, while STD-FPM is multithreaded and using **epoll** through libevent2.
