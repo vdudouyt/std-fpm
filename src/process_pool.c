@@ -28,6 +28,7 @@ static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, voi
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
 static void *pool_rip_idling_processes(void *ptr);
 static void rmsocket(unsigned int socket_id);
+static void remove_all_sockets(const char *path);
 
 bool pool_init(const char *path) {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -36,7 +37,22 @@ bool pool_init(const char *path) {
    pool_path = strdup(path);
    if(!pool_path) return false;
 
+   remove_all_sockets(path);
    return true;
+}
+
+static void remove_all_sockets(const char *path) {
+   char socket_path[4096];
+   DIR *dir;
+   if((dir = opendir(path)) == NULL) return;
+   struct dirent *entry;
+   while ((entry = readdir(dir)) != NULL) {
+      size_t len = strlen(entry->d_name);
+      if(len < 8) continue;
+      unsigned int socket_id = atoi(&entry->d_name[7]);
+      if(socket_id > 0) rmsocket(socket_id);
+   }
+   closedir(dir);
 }
 
 fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
@@ -139,6 +155,7 @@ static void *pool_rip_idling_processes(void *ptr) {
 static void rmsocket(unsigned int socket_id) {
    char socket_path[4096];
    snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, socket_id);
+   DEBUG("Removing %s", socket_path);
    unlink(socket_path);
 }
 
