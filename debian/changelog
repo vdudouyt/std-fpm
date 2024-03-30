@@ -1,3 +1,10 @@
+std-fpm (0.2-3) unstable; urgency=medium
+
+  * Added process_idle_timeout and rd_high_watermark into config
+  * Clean dangling socket files
+
+ -- Valentin Dudouyt <valentin.dudouyt@gmail.com>  Sat, 30 Mar 2024 09:59:00 +0200
+
 std-fpm (0.2-2~libevent-mt) unstable; urgency=medium
 
   * 0.2-2~libevent-mt
