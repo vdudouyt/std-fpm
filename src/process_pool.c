@@ -27,6 +27,8 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
 static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
 static void *pool_rip_idling_processes(void *ptr);
+static void rmsocket(unsigned int socket_id);
+static void remove_all_sockets(const char *path);
 
 bool pool_init(const char *path) {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -35,7 +37,22 @@ bool pool_init(const char *path) {
    pool_path = strdup(path);
    if(!pool_path) return false;
 
+   remove_all_sockets(path);
    return true;
+}
+
+static void remove_all_sockets(const char *path) {
+   char socket_path[4096];
+   DIR *dir;
+   if((dir = opendir(path)) == NULL) return;
+   struct dirent *entry;
+   while ((entry = readdir(dir)) != NULL) {
+      size_t len = strlen(entry->d_name);
+      if(len < 8) continue;
+      unsigned int socket_id = atoi(&entry->d_name[7]);
+      if(socket_id > 0) rmsocket(socket_id);
+   }
+   closedir(dir);
 }
 
 fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
@@ -97,6 +114,7 @@ static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, con
       if(pool_connect_process(base, proc)) {
          return proc;
       }
+      rmsocket(proc->socket_id);
       free(proc);
    }
 
@@ -109,6 +127,7 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
    snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, startup_counter);
 
    fcgi_process_t *proc = fcgi_spawn(socket_path, path);
+   proc->socket_id = startup_counter;
    if(!proc) return NULL;
    if(pool_connect_process(base, proc)) {
       return proc;
@@ -118,19 +137,26 @@ static fcgi_process_t *pool_create_process(struct event_base *base, const char *
    }
 }
 
-void pool_start_inactivity_detector() {
-   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, NULL);
+void pool_start_inactivity_detector(unsigned int process_idle_timeout) {
+   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, GINT_TO_POINTER(process_idle_timeout));
 }
 
 static void *pool_rip_idling_processes(void *ptr) {
-   int max_idling_time = 60;
+   unsigned int process_idle_timeout = GPOINTER_TO_INT(ptr);
    while(1) {
       DEBUG("pool_rip_idling_processes()");
       pthread_mutex_lock(&pool_mutex);
-      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &max_idling_time);
+      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &process_idle_timeout);
       pthread_mutex_unlock(&pool_mutex);
-      sleep(60);
+      sleep(process_idle_timeout >= 60 ? 60 : 1);
    }
+}
+
+static void rmsocket(unsigned int socket_id) {
+   char socket_path[4096];
+   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, socket_id);
+   DEBUG("Removing %s", socket_path);
+   unlink(socket_path);
 }
 
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data) {
@@ -145,6 +171,7 @@ static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value
       }
       DEBUG("[process pool] removing idle process: %s", key);
       kill(proc->pid, SIGTERM);
+      rmsocket(proc->socket_id);
       free(proc);
       g_queue_pop_tail(q);
    }

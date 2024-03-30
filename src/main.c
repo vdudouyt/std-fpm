@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
    unsigned int ctr = 0;
 
    int listen_sock = stdfpm_create_listening_socket(cfg->listen);
-   pool_start_inactivity_detector();
+   pool_start_inactivity_detector(cfg->process_idle_timeout);
 
    while (1) {
       int fd = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);

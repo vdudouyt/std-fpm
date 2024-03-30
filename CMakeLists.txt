@@ -23,7 +23,8 @@ set(SOURCE_FILES
    src/conn.c
    src/fdutils.c
    src/debug_utils.c
-   src/config.c)
+   src/config.c
+   src/units.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
