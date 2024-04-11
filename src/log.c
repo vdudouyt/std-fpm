@@ -8,7 +8,7 @@ static bool log_echo = false;
 FILE *f = NULL;
 
 bool log_open(const char *path) {
-   f = fopen(path, "w+");
+   f = fopen(path, "a+");
    return f != NULL;
 }
 
