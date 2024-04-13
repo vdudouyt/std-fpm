@@ -103,6 +103,7 @@ int main(int argc, char **argv) {
    uv_pipe_init(loop, &pipe, 0);
    unlink(sockpath);
    uv_pipe_bind(&pipe, sockpath);
+   chmod(sockpath, 0777);
 
    uv_listen((uv_stream_t *)&pipe, 0, stdfpm_onconnect);
    uv_run(loop, UV_RUN_DEFAULT);
