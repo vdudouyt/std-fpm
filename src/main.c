@@ -54,16 +54,17 @@ static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_b
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
 
 static void stdfpm_onconnect(uv_stream_t *stream, int status) {
+   DEBUG("stdfpm_onconnect()");
    assert(status == 0);
    uv_pipe_t *client = (uv_pipe_t*) malloc(sizeof(uv_pipe_t));
    assert(client);
    uv_pipe_init(stream->loop, client, 0);
 
    if(uv_accept(stream, (uv_stream_t*) client) == 0) {
-      printf("Connection received\n");
+      DEBUG("Socket accepted");
       uv_read_start((uv_stream_t*)client, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    } else {
-      printf("Accept failed\n");
+      DEBUG("Accept failed");
       uv_close((uv_handle_t*) client, NULL);
    }
 }
@@ -81,8 +82,11 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       fprintf(stderr, "Read error %s\n", uv_err_name(nread));
       uv_close((uv_handle_t*) client, NULL);
    } else if(nread > 0) {
-      printf("%ld bytes received: ", nread);
-      fwrite(buf->base, 1, nread, stdout);
+      #ifdef DEBUG_LOG
+      char escaped_data[4*65536+1];
+      escape(escaped_data, buf->base, nread);
+      DEBUG("message content: \"%s\"", escaped_data);
+      #endif
    }
 
    if (buf->base) {
