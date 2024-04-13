@@ -7,11 +7,8 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <signal.h>
-
-#include <event2/bufferevent.h>
-#include <event2/buffer.h>
-#include <event2/listener.h>
-#include <event2/util.h>
+#include <uv.h>
+#include <assert.h>
 
 #include "log.h"
 #include "debug.h"
@@ -53,57 +50,56 @@ static int stdfpm_create_listening_socket(const char *sock_path) {
    return listen_sock;
 }
 
+static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
+
+static void stdfpm_onconnect(uv_stream_t *stream, int status) {
+   assert(status == 0);
+   uv_pipe_t *client = (uv_pipe_t*) malloc(sizeof(uv_pipe_t));
+   assert(client);
+   uv_pipe_init(stream->loop, client, 0);
+
+   if(uv_accept(stream, (uv_stream_t*) client) == 0) {
+      printf("Connection received\n");
+      uv_read_start((uv_stream_t*)client, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
+   } else {
+      printf("Accept failed\n");
+      uv_close((uv_handle_t*) client, NULL);
+   }
+}
+
+static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+   buf->base = (char*) malloc(suggested_size);
+   buf->len = suggested_size;
+   assert(buf->base);
+}
+
+static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
+   if(nread == UV_EOF) {
+      printf("EOF reached\n");
+   } else if(nread < 0) {
+      fprintf(stderr, "Read error %s\n", uv_err_name(nread));
+      uv_close((uv_handle_t*) client, NULL);
+   } else if(nread > 0) {
+      printf("%ld bytes received: ", nread);
+      fwrite(buf->base, 1, nread, stdout);
+   }
+
+   if (buf->base) {
+      free(buf->base);
+   }
+}
+
 int main(int argc, char **argv) {
    log_set_echo(true);
+   uv_loop_t *loop = uv_default_loop();
 
-   cfg = stdfpm_read_config(argc, argv);
-   if(!cfg) EXIT_WITH_ERROR("Read config failed: %s", strerror(errno));
-   if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
+   char sockpath[] = "/tmp/std-fpm.sock";
+   uv_pipe_t pipe;
+   uv_pipe_init(loop, &pipe, 0);
+   unlink(sockpath);
+   uv_pipe_bind(&pipe, sockpath);
 
-   if(cfg->gid > 0 && setgid(cfg->gid) == -1) EXIT_WITH_ERROR("Couldn't set process gid: %s", strerror(errno));
-   if(cfg->uid > 0 && setuid(cfg->uid) == -1) EXIT_WITH_ERROR("Couldn't set process uid: %s", strerror(errno));
-   if(!pool_init(cfg->pool)) EXIT_WITH_ERROR("Pool initialization failed (malloc?)");
-
-   if(!cfg->foreground) {
-      log_set_echo(false);
-      if(daemon(0, 0) != 0) EXIT_WITH_ERROR("Couldn't daemonize");
-   }
-
-   signal(SIGPIPE, SIG_IGN);
-   signal(SIGCHLD, SIG_IGN);
-
-   worker_t **workers = calloc(cfg->worker_threads, sizeof(worker_t*));
-   if(!workers) EXIT_WITH_ERROR("Failed to allocate workers pool: %s", strerror(errno));
-   if(cfg->worker_threads <= 0) EXIT_WITH_ERROR("worker_threads count should be greated than zero");
-
-   for(unsigned int i = 0; i < cfg->worker_threads; i++) {
-      workers[i] = start_worker(stdfpm_socket_accepted_cb);
-      workers[i]->config = cfg;
-   }
-
-   struct sockaddr_un client_sockaddr;
-   unsigned int len = sizeof(client_sockaddr);
-   unsigned int ctr = 0;
-
-   int listen_sock = stdfpm_create_listening_socket(cfg->listen);
-   pool_start_inactivity_detector(cfg->process_idle_timeout);
-
-   while (1) {
-      int fd = accept(listen_sock, (struct sockaddr *) &client_sockaddr, &len);
-      if(fd == -1)  {
-         log_write("Dispatcher: failed while accepting connection: %s", strerror(errno));
-         continue;
-      }
-      DEBUG("Dispatcher: connection accepted: %d", fd);
-      unsigned int tid = (ctr++) % cfg->worker_threads;
-
-      worker_t *worker = workers[tid];
-      pthread_mutex_lock(&worker->conn_queue_mutex);
-      g_queue_push_head(worker->conn_queue, GINT_TO_POINTER(fd));
-      pthread_mutex_unlock(&worker->conn_queue_mutex);
-
-      if(write(worker->notify_send_fd, "C", 1) != 1) {
-         log_write("Worker %d wakeup pipe write failed: %s", worker->tid, strerror(errno));
-      }
-   }
+   uv_listen((uv_stream_t *)&pipe, 0, stdfpm_onconnect);
+   uv_run(loop, UV_RUN_DEFAULT);
 }
