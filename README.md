@@ -1,6 +1,6 @@
 STD-FPM
 =============
-A high-performance language-agnostic FastCGI process manager
+A high-performance language-agnostic FastCGI process manager with event-driven non-blocking I/O
 
 ## Comparison with similar software
 |                            | STD-FPM | PHP-FPM | mod_fcgid | spawn-fcgi |
