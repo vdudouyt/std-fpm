@@ -14,7 +14,6 @@
 #include "debug.h"
 #include "conn.h"
 #include "fcgi_parser.h"
-#include "fcgi_params_parser.h"
 #include "fcgitypes.h"
 #include "debug_utils.h"
 #include "process_pool.h"
@@ -69,6 +68,12 @@ static void stdfpm_onconnect(uv_stream_t *stream, int status) {
    }
 }
 
+static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
+   DEBUG("stdfpm_ondisconnect()");
+   free(uvhandle);
+}
+
+
 static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
    buf->base = (char*) malloc(suggested_size);
    buf->len = suggested_size;
@@ -77,19 +82,22 @@ static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_b
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
    if(nread == UV_EOF) {
-      printf("EOF reached\n");
+      DEBUG("EOF reached");
+      uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
    } else if(nread < 0) {
-      fprintf(stderr, "Read error %s\n", uv_err_name(nread));
-      uv_close((uv_handle_t*) client, NULL);
+      log_write("Read error %s", uv_err_name(nread));
+      uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
    } else if(nread > 0) {
       #ifdef DEBUG_LOG
       char escaped_data[4*65536+1];
       escape(escaped_data, buf->base, nread);
+      DEBUG("message size: %ld", nread);
       DEBUG("message content: \"%s\"", escaped_data);
       #endif
    }
 
    if (buf->base) {
+      DEBUG("Freeing buf->base");
       free(buf->base);
    }
 }
