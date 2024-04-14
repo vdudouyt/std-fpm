@@ -57,22 +57,26 @@ static void stdfpm_onconnect(uv_stream_t *stream, int status) {
    assert(status == 0);
    uv_pipe_t *client = (uv_pipe_t*) malloc(sizeof(uv_pipe_t));
    assert(client);
+   conn_t *conn = fd_new_client_conn(client);
+   assert(conn);
+   uv_handle_set_data((uv_handle_t *) client, conn);
    uv_pipe_init(stream->loop, client, 0);
 
    if(uv_accept(stream, (uv_stream_t*) client) == 0) {
       DEBUG("Socket accepted");
       uv_read_start((uv_stream_t*)client, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    } else {
-      DEBUG("Accept failed");
+      log_write("Accept failed");
       uv_close((uv_handle_t*) client, NULL);
    }
 }
 
 static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    DEBUG("stdfpm_ondisconnect()");
-   free(uvhandle);
+   conn_t *conn = uv_handle_get_data(uvhandle);
+   free(conn->pipe);
+   free(conn);
 }
-
 
 static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
    buf->base = (char*) malloc(suggested_size);
@@ -94,6 +98,11 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       DEBUG("message size: %ld", nread);
       DEBUG("message content: \"%s\"", escaped_data);
       #endif
+
+      conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
+      fcgi_parse(&conn->fcgiParser, buf->base, nread);
+      char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
+      if(script_filename) log_write("Script filename: %s", script_filename);
    }
 
    if (buf->base) {

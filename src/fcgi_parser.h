@@ -1,28 +1,30 @@
 #pragma once
+#include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
-   uint8_t version;
-   uint8_t type;
-   uint16_t requestId;
-   uint16_t contentLength;
-   uint8_t paddingLength;
-   uint8_t reserved;
-} fcgi_header_t;
-
-typedef void (*fcgi_parser_callback_t)(const fcgi_header_t *hdr, const char *data, void *userdata);
+#define MAX_PATH_LENGTH 4096
 
 typedef struct {
-   unsigned int status;
-   unsigned char buf[8 + 65536 + 256]; // header + max content length + max padding length
    unsigned int pos;
+   uint8_t type;
+   uint16_t length;
+   uint8_t paddingLength;
+} fcgi_request_parser_t;
 
-   fcgi_header_t hdr;
-   fcgi_parser_callback_t callback;
-   void *userdata;
+typedef struct {
+   unsigned int pos;
+   enum { READ_KEY_LENGTH = 0, READ_VALUE_LENGTH = 1, READ_PARAM = 2 } state;
+   unsigned int keyLength, valueLength;
+   char buf[MAX_PATH_LENGTH];
+   bool gotScriptFilename;
+} fcgi_params_parser_t;
+
+typedef struct {
+   fcgi_request_parser_t requestParser;
+   fcgi_params_parser_t paramsParser;
 } fcgi_parser_t;
 
-fcgi_parser_t *fcgi_parser_new();
-void fcgi_parser_write(fcgi_parser_t *this, const uint8_t *input, unsigned int length);
-void fcgi_parser_free(fcgi_parser_t *this);
-
+void fcgi_parser_init(fcgi_parser_t *ctx);
+void fcgi_parse(fcgi_parser_t *ctx, const char *buf, size_t len);
+char *fcgi_get_script_filename(fcgi_parser_t *ctx);

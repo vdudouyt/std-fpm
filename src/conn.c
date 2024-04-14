@@ -12,12 +12,12 @@
 
 #define RETURN_ERROR(...) { log_write(__VA_ARGS__); return NULL; }
 
-conn_t *conn_new(struct bufferevent *bev, int type) {
+conn_t *conn_new(uv_pipe_t *pipe, int type) {
    conn_t *ret = malloc(sizeof(conn_t));
    if(!ret) RETURN_ERROR("[conn] malloc failed");
    memset(ret, 0, sizeof(conn_t));
 
-   ret->bev = bev;
+   ret->pipe = pipe;
    ret->type = type;
    return ret;
 }
@@ -32,6 +32,7 @@ void conn_set_name(conn_t *this, const char *fmt, ...) {
    #endif
 }
 
+/*
 void conn_free(conn_t *this) {
    if(this->client) {
       fcgi_parser_free(this->client->msg_parser);
@@ -42,31 +43,14 @@ void conn_free(conn_t *this) {
    DEBUG("[%s] freed", this->name);
    free(this);
 }
+*/
 
-conn_t *fd_new_client_conn(struct bufferevent *bev) {
-   conn_t *ret = conn_new(bev, STDFPM_FCGI_CLIENT);
+conn_t *fd_new_client_conn(uv_pipe_t *pipe) {
+   conn_t *ret = conn_new(pipe, STDFPM_FCGI_CLIENT);
    if(!ret) {
       RETURN_ERROR("[fd_new_client_conn] failed to create conn");
    }
-   ret->client = malloc(sizeof(fcgi_client_t));
-   if(!ret->client) {
-      RETURN_ERROR("[fd_new_client_conn] fcgi_client malloc failed");
-   }
-   memset(ret->client, 0, sizeof(fcgi_client_t));
-
-   ret->client->inMemoryBuf = evbuffer_new();
-   if(!ret->client->inMemoryBuf) {
-      RETURN_ERROR("[fd_new_client_conn] evbuffer allocation failed");
-   }
-
-   ret->client->msg_parser = fcgi_parser_new();
-   ret->client->params_parser = fcgi_params_parser_new(4096);
-   if(!ret->client->msg_parser || !ret->client->params_parser) {
-      RETURN_ERROR("[fd_new_client_conn] FastCGI parsers malloc failed");
-   }
-
-   ret->client->msg_parser->userdata = ret;
-   ret->client->params_parser->userdata = ret;
+   fcgi_parser_init(&ret->fcgiParser);
 
    #ifdef DEBUG_LOG
    static unsigned int ctr = 1;
@@ -76,6 +60,7 @@ conn_t *fd_new_client_conn(struct bufferevent *bev) {
    return ret;
 }
 
+/*
 conn_t *fd_new_process_conn(fcgi_process_t *proc) {
    conn_t *ret = conn_new(proc->bev, STDFPM_FCGI_PROCESS);
    if(!ret) {
@@ -87,8 +72,9 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc) {
    conn_set_name(ret, "responder_%d", ctr++);
    return ret;
 }
+*/
 
 void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2) {
-   conn2->pipeTo = conn1;
-   conn1->pipeTo = conn2;
+   conn2->pairWith = conn1;
+   conn1->pairWith = conn2;
 }
