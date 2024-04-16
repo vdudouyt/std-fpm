@@ -84,6 +84,8 @@ static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_b
    assert(buf->base);
 }
 
+void stdfpm_onupstream_connect(uv_connect_t *req, int status);
+
 static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
    DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
 
@@ -94,9 +96,22 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
    snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
 
    fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
+   if(!proc) {
+      log_write("Failed to spawn a process: %s", script_filename);
+      return;
+   }
+
+   uv_pipe_t pipe;
+   uv_pipe_init(uv_default_loop(), &pipe, 0);
+   uv_connect_t *connect = (uv_connect_t *)malloc(sizeof(uv_connect_t));
+   uv_handle_set_data((uv_handle_t *) connect, client);
+   uv_pipe_connect(connect, &pipe, socket_path, stdfpm_onupstream_connect);
 }
 
-static void fcgi_on_pair_completed() {
+void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
+  assert(status == 0);
+  int r;
+  DEBUG("connected to fastcgi process");
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
