@@ -196,6 +196,7 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
 
 int main(int argc, char **argv) {
    log_set_echo(true);
+   pool_init();
    uv_loop_t *loop = uv_default_loop();
 
    char sockpath[] = "/tmp/std-fpm.sock";
