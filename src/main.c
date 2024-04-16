@@ -124,7 +124,6 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    DEBUG("connected to fastcgi process");
    conn_t *conn = uv_handle_get_data((uv_handle_t *) req);
 
-   log_write("Writing %d bytes to upstream", conn->storedBuf.len);
    uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
    uv_write((uv_write_t *)wreq, req->handle, &conn->storedBuf, 1, stdfpm_write_completed_cb);
 
@@ -133,6 +132,7 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    uv_read_start(req->handle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    newconn->pairedWith = conn;
    conn->pairedWith = newconn;
+   DEBUG("[%s] writing %d of stored bytes to %s", conn->name, conn->storedBuf.len, conn->pairedWith->name);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
@@ -163,19 +163,23 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       return;
    }
 
-   conn->storedBuf.base = buf->base; // TODO: append/realloc
-   conn->storedBuf.len = nread;
-
    if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith) {
       fcgi_parse(&conn->fcgiParser, buf->base, nread);
       char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
+
+      conn->storedBuf.base = buf->base; // TODO: append/realloc
+      conn->storedBuf.len = nread;
+
       if(script_filename) {
          fcgi_pair_with_process(conn, script_filename);
       }
    }
 
    if(conn->pairedWith) {
-      DEBUG("** not implemented ** ");
+      uv_buf_t wrbuf = { .base = buf->base, .len = nread };
+      uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
+      DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
+      uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
       return;
    }
 }
