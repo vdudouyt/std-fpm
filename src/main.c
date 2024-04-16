@@ -74,6 +74,9 @@ static void stdfpm_onconnect(uv_stream_t *stream, int status) {
 static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    conn_t *conn = uv_handle_get_data(uvhandle);
    DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
+   if(conn->pairedWith) {
+      conn->pairedWith->pairedWith = NULL;
+   }
    free(conn->pipe);
    free(conn);
 }
@@ -128,6 +131,8 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    conn_t *newconn = fd_new_process_conn(conn->process, (uv_pipe_t*) req->handle);
    uv_handle_set_data((uv_handle_t *) req->handle, newconn);
    uv_read_start(req->handle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
+   newconn->pairedWith = conn;
+   conn->pairedWith = newconn;
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
