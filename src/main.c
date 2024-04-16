@@ -136,7 +136,7 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    processConn->pairedWith = clientConn;
    clientConn->pairedWith = processConn;
    processConn->pendingWrites++;
-   DEBUG("[%s] writing %d of stored bytes to %s", clientConn->name, clientConn->storedBuf.len, processConn->name);
+   DEBUG("writing %d of stored bytes from %s to %s", clientConn->storedBuf.len, clientConn->name, processConn->name);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
