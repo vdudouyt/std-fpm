@@ -125,18 +125,18 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    assert(status == 0);
    int r;
    DEBUG("connected to fastcgi process");
-   conn_t *conn = uv_handle_get_data((uv_handle_t *) req);
+   conn_t *clientConn = uv_handle_get_data((uv_handle_t *) req);
 
    uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
-   uv_write((uv_write_t *)wreq, req->handle, &conn->storedBuf, 1, stdfpm_write_completed_cb);
+   uv_write((uv_write_t *)wreq, req->handle, &clientConn->storedBuf, 1, stdfpm_write_completed_cb);
 
-   conn_t *newconn = fd_new_process_conn(conn->process, (uv_pipe_t*) req->handle);
-   uv_handle_set_data((uv_handle_t *) req->handle, newconn);
+   conn_t *processConn = fd_new_process_conn(clientConn->process, (uv_pipe_t*) req->handle);
+   uv_handle_set_data((uv_handle_t *) req->handle, processConn);
    uv_read_start(req->handle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
-   newconn->pairedWith = conn;
-   conn->pairedWith = newconn;
-   conn->pairedWith->pendingWrites++;
-   DEBUG("[%s] writing %d of stored bytes to %s", conn->name, conn->storedBuf.len, conn->pairedWith->name);
+   processConn->pairedWith = clientConn;
+   clientConn->pairedWith = processConn;
+   processConn->pendingWrites++;
+   DEBUG("[%s] writing %d of stored bytes to %s", clientConn->name, clientConn->storedBuf.len, processConn->name);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
