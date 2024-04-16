@@ -114,7 +114,10 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
 }
 
 static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) req->handle);
    log_write("after_write(status = %d)", status);
+   conn->pendingWrites--;
+   log_write("pendingWrites = %d", conn->pendingWrites);
    free(req);
 }
 
@@ -132,10 +135,13 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    uv_read_start(req->handle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    newconn->pairedWith = conn;
    conn->pairedWith = newconn;
+   conn->pairedWith->pendingWrites++;
    DEBUG("[%s] writing %d of stored bytes to %s", conn->name, conn->storedBuf.len, conn->pairedWith->name);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
+
    if(nread < 0) {
       nread == UV_EOF ? DEBUG("EOF reached") : log_write("Read error %s", uv_err_name(nread));
       uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
@@ -148,8 +154,6 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       }
       return;
    }
-
-   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
 
    #ifdef DEBUG_LOG
    char escaped_data[4*65536+1];
@@ -178,6 +182,7 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
    if(conn->pairedWith) {
       uv_buf_t wrbuf = { .base = buf->base, .len = nread };
       uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
+      conn->pairedWith->pendingWrites++;
       DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
       uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
       return;
