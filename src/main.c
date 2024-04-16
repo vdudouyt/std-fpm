@@ -85,30 +85,28 @@ static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_b
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
-   if(nread == UV_EOF) {
-      DEBUG("EOF reached");
+   if(nread < 0) {
+      nread == UV_EOF ? DEBUG("EOF reached") : log_write("Read error %s", uv_err_name(nread));
       uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
-   } else if(nread < 0) {
-      log_write("Read error %s", uv_err_name(nread));
-      uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
-   } else if(nread > 0) {
-      #ifdef DEBUG_LOG
-      char escaped_data[4*65536+1];
-      escape(escaped_data, buf->base, nread);
-      DEBUG("message size: %ld", nread);
-      DEBUG("message content: \"%s\"", escaped_data);
-      #endif
-
-      conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
-      fcgi_parse(&conn->fcgiParser, buf->base, nread);
-      char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
-      if(script_filename) log_write("Script filename: %s", script_filename);
    }
 
-   if (buf->base) {
-      DEBUG("Freeing buf->base");
-      free(buf->base);
+   if(nread <= 0) {
+      if (buf->base) { DEBUG("freeing buf (1)"); free(buf->base); }
+      return;
    }
+
+   #ifdef DEBUG_LOG
+   char escaped_data[4*65536+1];
+   escape(escaped_data, buf->base, nread);
+   DEBUG("message size: %ld", nread);
+   DEBUG("message content: \"%s\"", escaped_data);
+   #endif
+   
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
+   fcgi_parse(&conn->fcgiParser, buf->base, nread);
+   char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
+   if(script_filename) log_write("Script filename: %s", script_filename);
+   if (buf->base) { DEBUG("freeing buf (2)"); free(buf->base); }
 }
 
 int main(int argc, char **argv) {
