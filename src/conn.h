@@ -11,7 +11,6 @@ struct conn_s {
    enum { STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
    uv_pipe_t *pipe;
    struct conn_s *pairedWith;
-   bool closeAfterWrite;
    unsigned int pendingWrites;
 
    #ifdef DEBUG_LOG

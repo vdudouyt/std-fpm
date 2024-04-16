@@ -75,6 +75,7 @@ static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    conn_t *conn = uv_handle_get_data(uvhandle);
    DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
    if(conn->pairedWith) {
+      if(!conn->pairedWith->pendingWrites) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
       conn->pairedWith->pairedWith = NULL;
    }
    free(conn->pipe);
@@ -119,6 +120,10 @@ static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    conn->pendingWrites--;
    log_write("pendingWrites = %d", conn->pendingWrites);
    free(req);
+
+   if(!conn->pendingWrites && !conn->pairedWith) {
+      uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
+   }
 }
 
 void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
