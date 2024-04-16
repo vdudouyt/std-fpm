@@ -15,8 +15,7 @@ struct conn_s {
    #ifdef DEBUG_LOG
    char name[64];
    #endif
-   GList *storedBuffers;
-
+   uv_buf_t storedBuf;
    fcgi_parser_t fcgiParser;
 };
 

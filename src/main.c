@@ -108,10 +108,20 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
    uv_pipe_connect(connect, &pipe, socket_path, stdfpm_onupstream_connect);
 }
 
+static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
+   log_write("after_write(status = %d)", status);
+   free(req);
+}
+
 void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
-  assert(status == 0);
-  int r;
-  DEBUG("connected to fastcgi process");
+   assert(status == 0);
+   int r;
+   DEBUG("connected to fastcgi process");
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) req);
+
+   log_write("Writing stored buffer");
+   uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
+   uv_write((uv_write_t *)wreq, req->handle, &conn->storedBuf, 1, stdfpm_write_completed_cb);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
@@ -141,6 +151,8 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       log_write("uv_handle_get_data() failed");
       return;
    }
+
+   conn->storedBuf = *buf; // TODO: append/realloc
 
    if(!conn->pairedWith) {
       fcgi_parse(&conn->fcgiParser, buf->base, nread);
