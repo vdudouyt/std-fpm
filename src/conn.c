@@ -60,9 +60,8 @@ conn_t *fd_new_client_conn(uv_pipe_t *pipe) {
    return ret;
 }
 
-/*
-conn_t *fd_new_process_conn(fcgi_process_t *proc) {
-   conn_t *ret = conn_new(proc->bev, STDFPM_FCGI_PROCESS);
+conn_t *fd_new_process_conn(fcgi_process_t *proc, uv_pipe_t *pipe) {
+   conn_t *ret = conn_new(pipe, STDFPM_FCGI_PROCESS);
    if(!ret) {
       RETURN_ERROR("[fd_new_process_conn] failed to create conn");
    }
@@ -72,7 +71,6 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc) {
    conn_set_name(ret, "responder_%d", ctr++);
    return ret;
 }
-*/
 
 void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2) {
    conn2->pairedWith = conn1;

@@ -72,15 +72,15 @@ static void stdfpm_onconnect(uv_stream_t *stream, int status) {
 }
 
 static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
-   DEBUG("stdfpm_ondisconnect()");
    conn_t *conn = uv_handle_get_data(uvhandle);
+   DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
    free(conn->pipe);
    free(conn);
 }
 
 static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-   buf->base = (char*) malloc(suggested_size);
-   buf->len = suggested_size;
+   buf->base = (char*) malloc(4096);
+   buf->len = 4096;
    assert(buf->base);
 }
 
@@ -101,11 +101,13 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
       return;
    }
 
-   uv_pipe_t pipe;
-   uv_pipe_init(uv_default_loop(), &pipe, 0);
-   uv_connect_t *connect = (uv_connect_t *)malloc(sizeof(uv_connect_t));
+   client->process = proc;
+
+   uv_pipe_t *pipe = malloc(sizeof(uv_pipe_t));
+   uv_pipe_init(uv_default_loop(), pipe, 0);
+   uv_connect_t *connect = (uv_connect_t*) malloc(sizeof(uv_connect_t));
    uv_handle_set_data((uv_handle_t *) connect, client);
-   uv_pipe_connect(connect, &pipe, socket_path, stdfpm_onupstream_connect);
+   uv_pipe_connect(connect, pipe, socket_path, stdfpm_onupstream_connect);
 }
 
 static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
@@ -119,9 +121,13 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    DEBUG("connected to fastcgi process");
    conn_t *conn = uv_handle_get_data((uv_handle_t *) req);
 
-   log_write("Writing stored buffer");
+   log_write("Writing %d bytes to upstream", conn->storedBuf.len);
    uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
    uv_write((uv_write_t *)wreq, req->handle, &conn->storedBuf, 1, stdfpm_write_completed_cb);
+
+   conn_t *newconn = fd_new_process_conn(conn->process, (uv_pipe_t*) req->handle);
+   uv_handle_set_data((uv_handle_t *) req->handle, newconn);
+   uv_read_start(req->handle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
 }
 
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
@@ -138,23 +144,24 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       return;
    }
 
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
+
    #ifdef DEBUG_LOG
    char escaped_data[4*65536+1];
    escape(escaped_data, buf->base, nread);
-   DEBUG("message size: %ld", nread);
-   DEBUG("message content: \"%s\"", escaped_data);
+   DEBUG("[%s] message size: %ld", conn->name, nread);
+   DEBUG("[%s] message content: \"%s\"", conn->name,  escaped_data);
    #endif
-   
-   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
 
    if(!conn) {
       log_write("uv_handle_get_data() failed");
       return;
    }
 
-   conn->storedBuf = *buf; // TODO: append/realloc
+   conn->storedBuf.base = buf->base; // TODO: append/realloc
+   conn->storedBuf.len = nread;
 
-   if(!conn->pairedWith) {
+   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith) {
       fcgi_parse(&conn->fcgiParser, buf->base, nread);
       char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
       if(script_filename) {
