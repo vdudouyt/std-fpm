@@ -148,6 +148,8 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status) {
    processConn->pairedWith = clientConn;
    clientConn->pairedWith = processConn;
    processConn->pendingWrites++;
+   free(req);
+   free(clientConn->storedBuf.base);
    DEBUG("writing %d of stored bytes from %s to %s", clientConn->storedBuf.len, clientConn->name, processConn->name);
 }
 
@@ -189,15 +191,13 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       if(script_filename) {
          fcgi_pair_with_process(conn, script_filename);
       }
-   }
-
-   if(conn->pairedWith) {
+   } else if(conn->pairedWith) {
       uv_buf_t wrbuf = { .base = buf->base, .len = nread };
       uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
       conn->pairedWith->pendingWrites++;
       DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
       uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
-      return;
+      free(buf->base);
    }
 }
 
