@@ -78,6 +78,9 @@ static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
       if(!conn->pairedWith->pendingWrites) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
       conn->pairedWith->pairedWith = NULL;
    }
+   if(conn->type == STDFPM_FCGI_PROCESS) {
+      pool_return_process(conn->process);
+   }
    free(conn->pipe);
    free(conn);
 }
@@ -93,13 +96,16 @@ void stdfpm_onupstream_connect(uv_connect_t *req, int status);
 static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
    DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
 
-   static unsigned int ctr = 0;
-   char pool_path[] = "/tmp/pool";
-   char socket_path[4096];
-   ctr++;
-   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
+   fcgi_process_t *proc = pool_borrow_process(script_filename);
+   if(!proc) {
+      static unsigned int ctr = 0;
+      char pool_path[] = "/tmp/pool";
+      char socket_path[4096];
+      ctr++;
+      snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
 
-   fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
+      proc = fcgi_spawn(socket_path, script_filename);
+   }
    if(!proc) {
       log_write("Failed to spawn a process: %s", script_filename);
       return;
@@ -107,11 +113,12 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
 
    client->process = proc;
 
+   DEBUG("Connecting to %s", proc->s_un.sun_path);
    uv_pipe_t *pipe = malloc(sizeof(uv_pipe_t));
    uv_pipe_init(uv_default_loop(), pipe, 0);
    uv_connect_t *connect = (uv_connect_t*) malloc(sizeof(uv_connect_t));
    uv_handle_set_data((uv_handle_t *) connect, client);
-   uv_pipe_connect(connect, pipe, socket_path, stdfpm_onupstream_connect);
+   uv_pipe_connect(connect, pipe, proc->s_un.sun_path, stdfpm_onupstream_connect);
 }
 
 static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
