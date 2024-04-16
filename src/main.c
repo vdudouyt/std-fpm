@@ -123,9 +123,9 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
 
 static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    conn_t *conn = uv_handle_get_data((uv_handle_t *) req->handle);
-   log_write("after_write(status = %d)", status);
+   DEBUG("stdfpm_write_completed_cb(status = %d)", status);
    conn->pendingWrites--;
-   log_write("pendingWrites = %d", conn->pendingWrites);
+   DEBUG("pendingWrites = %d", conn->pendingWrites);
    free(req);
 
    if(!conn->pendingWrites && !conn->pairedWith) {
