@@ -17,7 +17,7 @@
 static void parse_path(const char *path, char **dirname, char **basename, char **rel_basename);
 
 fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
-   DEBUG("[fastcgi spawner] spawning new process: %s", path);
+   DEBUG("fcgi_spawn(%s, %s)", socketpath, path);
 
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
    if(listen_sock == -1) {
@@ -95,7 +95,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
             snprintf(response, sizeof(response), "Status: 500\nContent-type: text/html\n\nStartup error: %s(%d)", strerror(errno), errno);
       }
 
-      fcgi_serve_response(listen_sock, response, strlen(response));
+      //fcgi_serve_response(listen_sock, response, strlen(response));
       close(listen_sock);
       close(STDIN_FILENO);
       unlink(ret->s_un.sun_path);

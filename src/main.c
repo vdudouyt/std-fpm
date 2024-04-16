@@ -84,6 +84,21 @@ static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_b
    assert(buf->base);
 }
 
+static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
+   DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
+
+   static unsigned int ctr = 0;
+   char pool_path[] = "/tmp/pool";
+   char socket_path[4096];
+   ctr++;
+   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
+
+   fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
+}
+
+static void fcgi_on_pair_completed() {
+}
+
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
    if(nread < 0) {
       nread == UV_EOF ? DEBUG("EOF reached") : log_write("Read error %s", uv_err_name(nread));
@@ -91,7 +106,10 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
    }
 
    if(nread <= 0) {
-      if (buf->base) { DEBUG("freeing buf (1)"); free(buf->base); }
+      if (buf->base) {
+         DEBUG("freeing buf (1)");
+         free(buf->base);
+      }
       return;
    }
 
@@ -103,10 +121,24 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
    #endif
    
    conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
-   fcgi_parse(&conn->fcgiParser, buf->base, nread);
-   char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
-   if(script_filename) log_write("Script filename: %s", script_filename);
-   if (buf->base) { DEBUG("freeing buf (2)"); free(buf->base); }
+
+   if(!conn) {
+      log_write("uv_handle_get_data() failed");
+      return;
+   }
+
+   if(!conn->pairedWith) {
+      fcgi_parse(&conn->fcgiParser, buf->base, nread);
+      char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
+      if(script_filename) {
+         fcgi_pair_with_process(conn, script_filename);
+      }
+   }
+
+   if(conn->pairedWith) {
+      DEBUG("** not implemented ** ");
+      return;
+   }
 }
 
 int main(int argc, char **argv) {

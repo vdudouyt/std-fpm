@@ -9,12 +9,13 @@ typedef struct conn_s conn_t;
 struct conn_s {
    enum { STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
    uv_pipe_t *pipe;
-   struct conn_s *pairWith;
+   struct conn_s *pairedWith;
    bool closeAfterWrite;
 
    #ifdef DEBUG_LOG
    char name[64];
    #endif
+   GList *storedBuffers;
 
    fcgi_parser_t fcgiParser;
 };
