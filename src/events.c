@@ -4,166 +4,191 @@
 #include "fcgitypes.h"
 #include "debug_utils.h"
 #include "process_pool.h"
-#include "fcgi_writer.h"
+#include "assert.h"
 
-static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr);
-static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr);
-static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr);
-static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
-static void onfcgiparam(const char *key, const char *value, void *userdata);
-static bool stdfpm_allowed_extension(const char *filename, char **extensions);
-static void stdfpm_disconnect(conn_t *conn);
+#define READ_RESUME(pipe) uv_read_start((uv_stream_t*) (pipe), stdfpm_alloc_buffer, stdfpm_read_completed_cb);
 
-void stdfpm_socket_accepted_cb(worker_t *worker, int fd) {
-   DEBUG("stdfpm_accept_conn()");
+static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
+static void stdfpm_write_completed_cb(uv_write_t *req, int status);
+static void stdfpm_ondisconnect(uv_handle_t *uvhandle);
+static void fcgi_pair_with_process(conn_t *client, const char *script_filename);
+static void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status);
+static void stdfpm_onconnecterror(uv_handle_t *uvhandle);
 
-   struct bufferevent *bev = bufferevent_socket_new(worker->base, fd,
-      BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
+void stdfpm_onconnect(uv_stream_t *stream, int status) {
+   DEBUG("stdfpm_onconnect()");
+   assert(status == 0);
+   uv_pipe_t *client = (uv_pipe_t*) malloc(sizeof(uv_pipe_t));
+   assert(client);
+   conn_t *conn = fd_new_client_conn(client);
+   assert(conn);
+   uv_handle_set_data((uv_handle_t *) client, conn);
+   uv_pipe_init(stream->loop, client, 0);
 
-   conn_t *conn = fd_new_client_conn(bev);
-   conn->worker = worker;
-   conn->client->msg_parser->callback = onfcgimessage;
-   conn->client->params_parser->callback = onfcgiparam;
-
-   bufferevent_setcb(bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, conn);
-   bufferevent_setwatermark(bev, EV_READ, 0, worker->config->rd_high_watermark);
-   bufferevent_enable(bev, EV_READ|EV_WRITE);
-}
-
-static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr) {
-   conn_t *conn = ptr;
-   struct evbuffer *src = bufferevent_get_input(bev);
-   size_t len = evbuffer_get_length(src);
-   DEBUG("[%s] %ld bytes received", conn->name, len);
-
-   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pipeTo) {
-      DEBUG("[%s] exposed %d bytes to FastCGI parser", conn->name, len);
-      unsigned char *bytes = evbuffer_pullup(src, -1);
-      fcgi_parser_write(conn->client->msg_parser, bytes, len);
-   }
-
-   if(conn->pipeTo) {
-      DEBUG("[%s] enqueued %d bytes into %s", conn->name, len, conn->pipeTo->name);
-      struct evbuffer *dst = bufferevent_get_output(conn->pipeTo->bev);
-	   evbuffer_add_buffer(dst, src);
-   } else if(conn->type == STDFPM_FCGI_CLIENT) {
-      DEBUG("[%s] enqueued %d bytes into inMemoryBuf", conn->name, len);
-	   evbuffer_add_buffer(conn->client->inMemoryBuf, src);
+   if(uv_accept(stream, (uv_stream_t*) client) == 0) {
+      DEBUG("Socket accepted");
+      uv_read_start((uv_stream_t*)client, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    } else {
-      DEBUG("[%s] discarded %d bytes", conn->name, len);
-      evbuffer_drain(src, len);
+      log_write("Accept failed");
+      uv_close((uv_handle_t*) client, NULL);
    }
 }
 
-static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr) {
-   conn_t *conn = ptr;
-   struct evbuffer *dst = bufferevent_get_output(conn->bev);
-   size_t remains = evbuffer_get_length(dst);
-   DEBUG("[%s] write completed, %d bytes remains in buffer. pipeTo = %08x", conn->name, remains, conn->pipeTo);
-   if(conn->closeAfterWrite && !remains) {
-      DEBUG("[%s] disconnecting by closeAfterWrite", conn->name);
-      stdfpm_disconnect(conn);
-   }
+static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+   buf->base = (char*) malloc (4096);
+   buf->len = 4096;
+   assert(buf->base);
 }
 
-static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr) {
-   conn_t *conn = ptr;
-   if(what & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
-      if(what & BEV_EVENT_EOF) DEBUG("[%s] EOF received", conn->name);
-      if(what & BEV_EVENT_ERROR) DEBUG("[%s] ERROR received", conn->name);
-      stdfpm_disconnect(conn);
-   }
-}
+static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
 
-static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
-   conn_t *conn = userdata;
-
-   DEBUG("[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
-      conn->name, fcgitype_to_string(hdr->type), hdr->requestId, hdr->contentLength);
-
-   if(hdr->contentLength) {
-      char escaped_data[4*65536+1];
-      escape(escaped_data, data, hdr->contentLength);
-      DEBUG("[%s] message content: \"%s\"", conn->name, escaped_data);
+   if(nread < 0) {
+      nread == UV_EOF ? DEBUG("EOF reached") : log_write("Read error %s", uv_err_name(nread));
+      uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
    }
 
-   if(hdr->type == FCGI_PARAMS) {
-      fcgi_params_parser_write(conn->client->params_parser, data, hdr->contentLength);
-   }
-}
-
-static void onfcgiparam(const char *key, const char *value, void *userdata) {
-   conn_t *conn = userdata;
-   if(!strcmp(key, "SCRIPT_FILENAME")) {
-      DEBUG("[%s] got script filename: %s", conn->name, value);
-
-      // Apache
-      const char pre[] = "proxy:fcgi://localhost/";
-      if(!strncmp(pre, value, strlen(pre))) value = &value[strlen(pre)];
-
-      if(!stdfpm_allowed_extension(value, conn->worker->config->extensions)) {
-         char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
-         fcgi_send_response(conn, response, strlen(response));
-         return;
+   if(nread <= 0) {
+      if (buf->base) {
+         DEBUG("freeing buf (1)");
+         free(buf->base);
       }
+      return;
+   }
 
-      struct event_base *base = bufferevent_get_base(conn->bev);
-      fcgi_process_t *proc = pool_borrow_process(base, value);
+   #ifdef DEBUG_LOG
+   char escaped_data[4*65536+1];
+   escape(escaped_data, buf->base, nread);
+   DEBUG("[%s] message size: %ld", conn->name, nread);
+   DEBUG("[%s] message content: \"%s\"", conn->name,  escaped_data);
+   #endif
 
-      if(!proc) {
-         DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
-         return;
+   if(!conn) {
+      log_write("uv_handle_get_data() failed");
+      return;
+   }
+
+   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith) {
+      fcgi_parse(&conn->fcgiParser, buf->base, nread);
+      char *script_filename = fcgi_get_script_filename(&conn->fcgiParser);
+
+      conn->storedBuf.base = buf->base; // TODO: append/realloc
+      conn->storedBuf.len = nread;
+
+      if(script_filename) {
+         fcgi_pair_with_process(conn, script_filename);
       }
-
-      conn_t *newconn = fd_new_process_conn(proc);
-      conn_bidirectional_pipe(conn, newconn);
-      DEBUG("Started child process: %s", newconn->name);
-
-      struct evbuffer *dst = bufferevent_get_output(newconn->bev);
-      DEBUG("[%s] took %d bytes from %s inMemoryBuf", newconn->name, evbuffer_get_length(dst), conn->name);
-	   evbuffer_add_buffer(dst, conn->client->inMemoryBuf);
-
-      bufferevent_setcb(newconn->bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, newconn);
-      bufferevent_enable(newconn->bev, EV_READ|EV_WRITE);
+   } else if(conn->pairedWith) {
+      uv_buf_t wrbuf = { .base = buf->base, .len = nread };
+      uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
+      conn->pairedWith->pendingWrites++;
+      DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
+      uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
+      uv_read_stop(client);
+      free(buf->base);
    }
 }
 
-static void stdfpm_disconnect(conn_t *conn) {
-   // break the pipe so that the next write_cb() could close the connection if nothing remains
-   DEBUG("[%s] stdfpm_disconnect()", conn->name);
-   if(conn->process) {
-      pool_release_process(conn->process);
+static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
+   conn_t *conn = uv_handle_get_data((uv_handle_t *) req->handle);
+   DEBUG("stdfpm_write_completed_cb(status = %d)", status);
+   conn->pendingWrites--;
+   DEBUG("pendingWrites = %d", conn->pendingWrites);
+   free(req);
+
+   if(!conn->pendingWrites && !conn->pairedWith) {
+      uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
    }
-   if(conn->pipeTo) {
-      conn->pipeTo->pipeTo = NULL;
-      struct evbuffer *dst = bufferevent_get_output(conn->pipeTo->bev);
-      size_t remains = evbuffer_get_length(dst);
-      if(remains > 0) {
-         DEBUG("[%s] partner %s has %d bytes remaining to write", conn->name, conn->pipeTo->name, remains);
-         conn->pipeTo->closeAfterWrite = true;
-      } else {
-         DEBUG("[%s] partner %s has %d bytes remaining to write, disconnecting it", conn->name, conn->pipeTo->name, remains);
-         stdfpm_disconnect(conn->pipeTo);
-      }
-   }
-   bufferevent_setcb(conn->bev, NULL, NULL, NULL, NULL);
-   DEBUG("Disconnecting %s", conn->name);
-   bufferevent_free(conn->bev);
-   conn_free(conn);
+
+   READ_RESUME(conn->pairedWith->pipe);
 }
 
-bool stdfpm_allowed_extension(const char *filename, char **extensions) {
-   if(!extensions) {
-      return false;
+static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
+   conn_t *conn = uv_handle_get_data(uvhandle);
+   DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
+   if(conn->pairedWith) {
+      if(!conn->pairedWith->pendingWrites) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
+      conn->pairedWith->pairedWith = NULL;
+   }
+   if(conn->type == STDFPM_FCGI_PROCESS) {
+      pool_return_process(conn->process);
+   }
+   free(conn->pipe);
+   free(conn);
+}
+
+static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
+   DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
+
+   fcgi_process_t *proc = pool_borrow_process(script_filename);
+   client->probeMode = RETRY_ON_FAILURE;
+
+   if(!proc) {
+      static unsigned int ctr = 0;
+      char pool_path[] = "/tmp/pool";
+      char socket_path[4096];
+      ctr++;
+      snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
+
+      proc = fcgi_spawn(socket_path, script_filename);
+      client->probeMode = CLOSE_ON_FAILURE;
    }
 
-   char *ext = strrchr(filename, '.');
-   if(!ext) return false;
-
-   unsigned int i = 0;
-   for(char **s = extensions; s[i]; i++) {
-      if(!strcmp(ext, s[i])) return true;
+   if(!proc) {
+      log_write("Failed to spawn a process: %s", script_filename);
+      return;
    }
 
-   return false;
+   if(client->process) free(client->process); // previous retry
+   client->process = proc;
+
+   DEBUG("Connecting to %s", proc->s_un.sun_path);
+   uv_pipe_t *processConnHandle = malloc(sizeof(uv_pipe_t));
+   uv_pipe_init(uv_default_loop(), processConnHandle, 0);
+   uv_connect_t *processConnRequest = (uv_connect_t*) malloc(sizeof(uv_connect_t));
+   uv_handle_set_data((uv_handle_t *) processConnRequest, client);
+   uv_pipe_connect(processConnRequest, processConnHandle, proc->s_un.sun_path, stdfpm_onupstream_connect);
+}
+
+static void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
+   conn_t *clientConn = uv_handle_get_data((uv_handle_t *) processConnRequest);
+   fcgi_process_t *proc = clientConn->process;
+   uv_stream_t *processConnHandle = processConnRequest->handle;
+
+   if(status == 0) {
+      DEBUG("connected to fastcgi process: %s:%s",
+         proc->s_un.sun_path, proc->filepath);
+
+      conn_t *processConn = fd_new_process_conn(proc, (uv_pipe_t*) processConnHandle);
+      DEBUG("writing %d of stored bytes from %s to %s", clientConn->storedBuf.len, clientConn->name, processConn->name);
+      uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
+      uv_write((uv_write_t *)wreq, processConnHandle, &clientConn->storedBuf, 1, stdfpm_write_completed_cb);
+      uv_read_stop((uv_stream_t*) clientConn->pipe);
+      free(clientConn->storedBuf.base);
+
+      uv_handle_set_data((uv_handle_t *) processConnHandle, processConn);
+      uv_read_start(processConnHandle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
+      processConn->pairedWith = clientConn;
+      clientConn->pairedWith = processConn;
+      processConn->pendingWrites++;
+   } else if(clientConn->probeMode == RETRY_ON_FAILURE) {
+      DEBUG("[%s] failed while connecting to fastcgi process, trying the next: %s:%s",
+         clientConn->name, proc->s_un.sun_path, proc->filepath);
+      fcgi_pair_with_process(clientConn, proc->filepath); // frees proc automatically
+      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
+   } else if(clientConn->probeMode == CLOSE_ON_FAILURE) {
+      log_write("execve() succeeded, yet failed while connecting to fastcgi process. Terminating client's connection: %s",
+         proc->filepath);
+      free(proc);
+      free(clientConn->storedBuf.base);
+      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
+      uv_close((uv_handle_t*) clientConn->pipe, stdfpm_ondisconnect);
+   }
+
+   free(processConnRequest);
+}
+
+static void stdfpm_onconnecterror(uv_handle_t *uvhandle) {
+   free(uvhandle);
 }
