@@ -120,11 +120,12 @@ static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
 
 static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
    DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
-
    fcgi_process_t *proc = pool_borrow_process(script_filename);
-   client->probeMode = RETRY_ON_FAILURE;
 
-   if(!proc) {
+   if(proc) {
+      client->probeMode = RETRY_ON_FAILURE;
+   } else {
+      client->probeMode = CLOSE_ON_FAILURE;
       static unsigned int ctr = 0;
       char pool_path[] = "/tmp/pool";
       char socket_path[4096];
@@ -132,7 +133,6 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename) 
       snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
 
       proc = fcgi_spawn(socket_path, script_filename);
-      client->probeMode = CLOSE_ON_FAILURE;
    }
 
    if(!proc) {
