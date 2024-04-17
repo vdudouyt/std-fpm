@@ -16,6 +16,8 @@ struct conn_s {
    #ifdef DEBUG_LOG
    char name[64];
    #endif
+   // whenever to retry or drop client connection on fastcgi process connection error
+   enum { RETRY_ON_FAILURE, CLOSE_ON_FAILURE } probeMode;
    uv_buf_t storedBuf;
    fcgi_parser_t fcgiParser;
    fcgi_process_t *process;
