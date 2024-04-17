@@ -9,7 +9,16 @@ pkg_search_module(LIBUV REQUIRED libuv)
 include_directories(${GLIB_INCLUDE_DIRS})
 link_directories(${GLIB_LIBRARY_DIRS})
 
-set(SOURCE_FILES src/main.c src/debug_utils.c src/log.c src/fcgi_parser.c src/conn.c src/fcgi_process.c src/process_pool.c src/events.c)
+set(SOURCE_FILES
+   src/main.c
+   src/debug_utils.c
+   src/log.c
+   src/fcgi_parser.c
+   src/conn.c
+   src/fcgi_process.c
+   src/process_pool.c
+   src/events.c
+   src/connect_process.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)

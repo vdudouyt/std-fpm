@@ -4,17 +4,10 @@
 #include "fcgitypes.h"
 #include "debug_utils.h"
 #include "process_pool.h"
+#include "connect_process.h"
 #include "assert.h"
 
 #define READ_RESUME(pipe) uv_read_start((uv_stream_t*) (pipe), stdfpm_alloc_buffer, stdfpm_read_completed_cb);
-
-static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
-static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
-static void stdfpm_write_completed_cb(uv_write_t *req, int status);
-static void stdfpm_ondisconnect(uv_handle_t *uvhandle);
-static void fcgi_pair_with_process(conn_t *client, const char *script_filename);
-static void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status);
-static void stdfpm_onconnecterror(uv_handle_t *uvhandle);
 
 void stdfpm_conn_received_cb(uv_stream_t *stream, int status) {
    DEBUG("stdfpm_conn_received_cb()");
@@ -35,13 +28,13 @@ void stdfpm_conn_received_cb(uv_stream_t *stream, int status) {
    }
 }
 
-static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
    buf->base = (char*) malloc (4096);
    buf->len = 4096;
    assert(buf->base);
 }
 
-static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
+void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
    conn_t *conn = uv_handle_get_data((uv_handle_t *) client);
 
    if(nread < 0) {
@@ -77,7 +70,7 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       conn->storedBuf.len = nread;
 
       if(script_filename) {
-         fcgi_pair_with_process(conn, script_filename);
+         stdfpm_connect_process(conn, script_filename);
       }
    } else if(conn->pairedWith) {
       uv_buf_t wrbuf = { .base = buf->base, .len = nread };
@@ -90,7 +83,7 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
    }
 }
 
-static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
+void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    conn_t *conn = uv_handle_get_data((uv_handle_t *) req->handle);
    DEBUG("stdfpm_write_completed_cb(status = %d)", status);
    conn->pendingWrites--;
@@ -104,7 +97,7 @@ static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    READ_RESUME(conn->pairedWith->pipe);
 }
 
-static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
+void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    conn_t *conn = uv_handle_get_data(uvhandle);
    DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
    if(conn->pairedWith) {
@@ -116,79 +109,4 @@ static void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    }
    free(conn->pipe);
    free(conn);
-}
-
-static void fcgi_pair_with_process(conn_t *client, const char *script_filename) {
-   DEBUG("fcgi_pair_with_process(%s, %s)", client->name, script_filename);
-   fcgi_process_t *proc = pool_borrow_process(script_filename);
-
-   if(proc) {
-      client->probeMode = RETRY_ON_FAILURE;
-   } else {
-      client->probeMode = CLOSE_ON_FAILURE;
-      static unsigned int ctr = 0;
-      char pool_path[] = "/tmp/pool";
-      char socket_path[4096];
-      ctr++;
-      snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
-
-      proc = fcgi_spawn(socket_path, script_filename);
-   }
-
-   if(!proc) {
-      log_write("Failed to spawn a process: %s", script_filename);
-      return;
-   }
-
-   if(client->process) free(client->process); // previous retry
-   client->process = proc;
-
-   DEBUG("Connecting to %s", proc->s_un.sun_path);
-   uv_pipe_t *processConnHandle = malloc(sizeof(uv_pipe_t));
-   uv_pipe_init(uv_default_loop(), processConnHandle, 0);
-   uv_connect_t *processConnRequest = (uv_connect_t*) malloc(sizeof(uv_connect_t));
-   uv_handle_set_data((uv_handle_t *) processConnRequest, client);
-   uv_pipe_connect(processConnRequest, processConnHandle, proc->s_un.sun_path, stdfpm_onupstream_connect);
-}
-
-static void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
-   conn_t *clientConn = uv_handle_get_data((uv_handle_t *) processConnRequest);
-   fcgi_process_t *proc = clientConn->process;
-   uv_stream_t *processConnHandle = processConnRequest->handle;
-
-   if(status == 0) {
-      DEBUG("connected to fastcgi process: %s:%s",
-         proc->s_un.sun_path, proc->filepath);
-
-      conn_t *processConn = fd_new_process_conn(proc, (uv_pipe_t*) processConnHandle);
-      DEBUG("writing %d of stored bytes from %s to %s", clientConn->storedBuf.len, clientConn->name, processConn->name);
-      uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
-      uv_write((uv_write_t *)wreq, processConnHandle, &clientConn->storedBuf, 1, stdfpm_write_completed_cb);
-      uv_read_stop((uv_stream_t*) clientConn->pipe);
-      free(clientConn->storedBuf.base);
-
-      uv_handle_set_data((uv_handle_t *) processConnHandle, processConn);
-      uv_read_start(processConnHandle, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
-      processConn->pairedWith = clientConn;
-      clientConn->pairedWith = processConn;
-      processConn->pendingWrites++;
-   } else if(clientConn->probeMode == RETRY_ON_FAILURE) {
-      DEBUG("[%s] failed while connecting to fastcgi process, trying the next: %s:%s",
-         clientConn->name, proc->s_un.sun_path, proc->filepath);
-      fcgi_pair_with_process(clientConn, proc->filepath); // frees proc automatically
-      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
-   } else if(clientConn->probeMode == CLOSE_ON_FAILURE) {
-      log_write("execve() succeeded, yet failed while connecting to fastcgi process. Terminating client's connection: %s",
-         proc->filepath);
-      free(proc);
-      free(clientConn->storedBuf.base);
-      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
-      uv_close((uv_handle_t*) clientConn->pipe, stdfpm_ondisconnect);
-   }
-
-   free(processConnRequest);
-}
-
-static void stdfpm_onconnecterror(uv_handle_t *uvhandle) {
-   free(uvhandle);
 }
