@@ -16,8 +16,8 @@ static void fcgi_pair_with_process(conn_t *client, const char *script_filename);
 static void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status);
 static void stdfpm_onconnecterror(uv_handle_t *uvhandle);
 
-void stdfpm_onconnect(uv_stream_t *stream, int status) {
-   DEBUG("stdfpm_onconnect()");
+void stdfpm_conn_received_cb(uv_stream_t *stream, int status) {
+   DEBUG("stdfpm_conn_received_cb()");
    assert(status == 0);
    uv_pipe_t *client = (uv_pipe_t*) malloc(sizeof(uv_pipe_t));
    assert(client);
