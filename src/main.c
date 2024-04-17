@@ -26,30 +26,6 @@ static stdfpm_config_t *cfg = NULL;
 #define EXIT_WITH_ERROR(...) { log_write(__VA_ARGS__); exit(-1); }
 #define READ_RESUME(pipe) uv_read_start((uv_stream_t*) (pipe), stdfpm_alloc_buffer, stdfpm_read_completed_cb);
 
-static int stdfpm_create_listening_socket(const char *sock_path) {
-   int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-   if(listen_sock == -1) perror("[main] couldn't create a listener socket");
-
-   struct sockaddr_un s_un;
-   s_un.sun_family = AF_UNIX;
-   strcpy(s_un.sun_path, sock_path);
-
-   if(connect(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
-      unlink(s_un.sun_path); // Socket is in use, prepare for binding
-   }
-
-   if(bind(listen_sock, (struct sockaddr *) &s_un, sizeof(s_un)) == -1) {
-      perror("[main] failed to bind a unix domain socket");
-   }
-
-   chmod(s_un.sun_path, 0777);
-   if(listen(listen_sock, 1024) == -1) {
-      perror("[main] failed to listen a unix domain socket");
-   }
-
-   return listen_sock;
-}
-
 static void stdfpm_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
 static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
 
