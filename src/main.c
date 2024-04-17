@@ -24,6 +24,7 @@
 static stdfpm_config_t *cfg = NULL;
 
 #define EXIT_WITH_ERROR(...) { log_write(__VA_ARGS__); exit(-1); }
+#define READ_RESUME(pipe) uv_read_start((uv_stream_t*) (pipe), stdfpm_alloc_buffer, stdfpm_read_completed_cb);
 
 static int stdfpm_create_listening_socket(const char *sock_path) {
    int listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -140,6 +141,8 @@ static void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    if(!conn->pendingWrites && !conn->pairedWith) {
       uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
    }
+
+   READ_RESUME(conn->pairedWith->pipe);
 }
 
 void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
@@ -155,6 +158,7 @@ void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
       DEBUG("writing %d of stored bytes from %s to %s", clientConn->storedBuf.len, clientConn->name, processConn->name);
       uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
       uv_write((uv_write_t *)wreq, processConnHandle, &clientConn->storedBuf, 1, stdfpm_write_completed_cb);
+      uv_read_stop((uv_stream_t*) clientConn->pipe);
       free(clientConn->storedBuf.base);
 
       uv_handle_set_data((uv_handle_t *) processConnHandle, processConn);
@@ -223,6 +227,7 @@ static void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const u
       conn->pairedWith->pendingWrites++;
       DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
       uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
+      uv_read_stop(client);
       free(buf->base);
    }
 }
