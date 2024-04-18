@@ -17,4 +17,7 @@ typedef struct {
    unsigned int process_idle_timeout;
 } stdfpm_config_t;
 
+
+stdfpm_config_t *get_config();
+void stdfpm_set_config(stdfpm_config_t *newcfg);
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv);

@@ -13,10 +13,9 @@ void stdfpm_connect_process(conn_t *client, const char *script_filename) {
    } else {
       client->probeMode = CLOSE_ON_FAILURE;
       static unsigned int ctr = 0;
-      char pool_path[] = "/tmp/pool";
       char socket_path[4096];
       ctr++;
-      snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, ctr);
+      snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", get_config()->pool, ctr);
 
       proc = fcgi_spawn(socket_path, script_filename);
    }

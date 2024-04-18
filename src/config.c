@@ -20,6 +20,16 @@ static char **cfg_get_string_list(GKeyFile *keyfile, const gchar* group_name, co
 static uid_t cfg_getuid(const char *user);
 static gid_t cfg_getgid(const char *group);
 
+stdfpm_config_t *cfg;
+
+stdfpm_config_t *get_config() {
+   return cfg;
+}
+
+void stdfpm_set_config(stdfpm_config_t *newcfg) {
+   cfg = newcfg;
+}
+
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    stdfpm_config_t *cfg = malloc(sizeof(stdfpm_config_t));
    if(!cfg) SHOW_ERROR_AND_EXIT("[config] malloc failed")
