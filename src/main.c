@@ -24,6 +24,9 @@
 static stdfpm_config_t *cfg = NULL;
 
 int main(int argc, char **argv) {
+   signal(SIGPIPE, SIG_IGN);
+   signal(SIGCHLD, SIG_IGN);
+
    log_set_echo(true);
    pool_init();
    uv_loop_t *loop = uv_default_loop();
