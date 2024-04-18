@@ -6,7 +6,7 @@
 #include <string.h>
 #include <gmodule.h>
 #include <unistd.h>
-#include <event2/bufferevent.h>
+#include <uv.h>
 #include "fdutils.h"
 #include "log.h"
 #include "debug.h"
@@ -18,13 +18,6 @@
 static GHashTable *process_pool = NULL;
 static unsigned int startup_counter = 0;
 pthread_mutex_t pool_mutex;
-
-static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
-static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
-static fcgi_process_t *pool_create_process(struct event_base *base, const char *path);
-static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
-static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
-static void *pool_rip_idling_processes(void *ptr);
 
 bool pool_init() {
    process_pool = g_hash_table_new(g_str_hash, g_str_equal);
@@ -67,4 +60,30 @@ void pool_return_process(fcgi_process_t *proc) {
 
    g_queue_push_head(q, proc);
    pthread_mutex_unlock(&pool_mutex);
+}
+
+static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_data);
+
+void pool_rip_idling(uv_timer_t *handle) {
+   unsigned int process_idle_timeout = 3;
+   pthread_mutex_lock(&pool_mutex);
+   g_hash_table_foreach(process_pool, idleripper_visit_bucket, &process_idle_timeout);
+   pthread_mutex_unlock(&pool_mutex);
+}
+
+static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_data) {
+   unsigned int max_idling_time = *(unsigned int*) user_data;
+   GQueue *q = value;
+   fcgi_process_t *proc;
+   time_t curtime = time(NULL);
+
+   while(proc = g_queue_peek_tail(q)) {
+      if(curtime - proc->last_used < max_idling_time) {
+         break;
+      }
+      DEBUG("[process pool] removing idle process: %s", key);
+      kill(proc->pid, SIGTERM);
+      free(proc);
+      g_queue_pop_tail(q);
+   }
 }

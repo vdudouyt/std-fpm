@@ -35,6 +35,10 @@ int main(int argc, char **argv) {
    uv_pipe_bind(&pipe, sockpath);
    chmod(sockpath, 0777);
 
+   uv_timer_t tim1;
+   uv_timer_init(loop, &tim1);
+   uv_timer_start(&tim1, pool_rip_idling, 0, 1000);
+
    uv_listen((uv_stream_t *)&pipe, 1024, stdfpm_conn_received_cb);
    uv_run(loop, UV_RUN_DEFAULT);
 }
