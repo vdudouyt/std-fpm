@@ -30,12 +30,15 @@ int main(int argc, char **argv) {
    pool_init();
    uv_loop_t *loop = uv_default_loop();
 
-   char sockpath[] = "/tmp/std-fpm.sock";
    uv_pipe_t pipe;
    uv_pipe_init(loop, &pipe, 0);
-   unlink(sockpath);
-   uv_pipe_bind(&pipe, sockpath);
-   chmod(sockpath, 0777);
+   unlink(cfg->listen);
+   int status = uv_pipe_bind(&pipe, cfg->listen);
+   if(status != 0) {
+      log_write("Couldn't bind to %s: %s", cfg->listen, uv_strerror(status));
+      exit(-1);
+   }
+   chmod(cfg->listen, 0777);
 
    uv_timer_t tim1;
    uv_timer_init(loop, &tim1);
