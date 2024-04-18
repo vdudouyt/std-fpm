@@ -82,7 +82,7 @@ static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_
          break;
       }
       DEBUG("[process pool] removing idle process: %s", key);
-      kill(proc->pid, SIGTERM);
+      kill(proc->pid, SIGTERM); // TODO: can it hang?
       free(proc);
       g_queue_pop_tail(q);
    }
