@@ -32,19 +32,6 @@ void conn_set_name(conn_t *this, const char *fmt, ...) {
    #endif
 }
 
-/*
-void conn_free(conn_t *this) {
-   if(this->client) {
-      fcgi_parser_free(this->client->msg_parser);
-      fcgi_params_parser_free(this->client->params_parser);
-      evbuffer_free(this->client->inMemoryBuf);
-      free(this->client);
-   }
-   DEBUG("[%s] freed", this->name);
-   free(this);
-}
-*/
-
 conn_t *fd_new_client_conn(uv_pipe_t *pipe) {
    conn_t *ret = conn_new(pipe, STDFPM_FCGI_CLIENT);
    if(!ret) {
@@ -70,9 +57,4 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc, uv_pipe_t *pipe) {
    static unsigned int ctr = 1;
    conn_set_name(ret, "responder_%d", ctr++);
    return ret;
-}
-
-void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2) {
-   conn2->pairedWith = conn1;
-   conn1->pairedWith = conn2;
 }
