@@ -3,6 +3,8 @@
 #include <sys/types.h>
 
 typedef struct {
+   const char *user;
+   const char *group;
    uid_t uid;
    gid_t gid;
 
@@ -12,9 +14,7 @@ typedef struct {
    char **extensions;
 
    bool foreground;
-   unsigned int worker_threads;
    unsigned int process_idle_timeout;
-   unsigned int rd_high_watermark;
 } stdfpm_config_t;
 
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv);

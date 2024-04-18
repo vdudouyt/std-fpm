@@ -21,13 +21,12 @@
 #include "config.h"
 #include "events.h"
 
-static stdfpm_config_t *cfg = NULL;
-
 int main(int argc, char **argv) {
+   log_set_echo(true);
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
+   stdfpm_config_t *cfg = stdfpm_read_config(argc, argv);
 
-   log_set_echo(true);
    pool_init();
    uv_loop_t *loop = uv_default_loop();
 

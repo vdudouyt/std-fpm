@@ -10,8 +10,15 @@
 #include <grp.h>
 
 #define SHOW_ERROR_AND_EXIT(...) { log_write(__VA_ARGS__); exit(-1); }
+#define CFG_LOAD_OPTION(option, section, method) {\
+   cfg->option = (method)(localini, (section), #option, &error); \
+   if(error) SHOW_ERROR_AND_EXIT("[config] %s not specified", #option);\
+}
 
 static void print_help_and_exit(int argc, char **argv);
+static char **cfg_get_string_list(GKeyFile *keyfile, const gchar* group_name, const gchar *key, GError **error);
+static uid_t cfg_getuid(const char *user);
+static gid_t cfg_getgid(const char *group);
 
 stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
    stdfpm_config_t *cfg = malloc(sizeof(stdfpm_config_t));
@@ -41,38 +48,37 @@ stdfpm_config_t *stdfpm_read_config(int argc, char **argv) {
       SHOW_ERROR_AND_EXIT("Failed to open %s: %s", cfgpath, error->message);
    }
 
-   const char* user = g_key_file_get_string(localini, "global", "user", NULL);
-   if(!user && getuid() == 0) SHOW_ERROR_AND_EXIT("[config] user not specified");
-
-   const char* group = g_key_file_get_string(localini, "global", "group", NULL);
-   if(!group && getgid() == 0) SHOW_ERROR_AND_EXIT("[config] group not specified");
-
-   if(user) {
-      const struct passwd *pwd = getpwnam(user);
-      if(!pwd) SHOW_ERROR_AND_EXIT("[config] user not found: %s", user);
-      cfg->uid = pwd->pw_uid;
+   if(getuid() == 0) {
+      CFG_LOAD_OPTION(user, "global", g_key_file_get_string);
+      CFG_LOAD_OPTION(group, "global", g_key_file_get_string);
+      cfg->uid = cfg_getuid(cfg->user);
+      cfg->gid = cfg_getgid(cfg->group);
    }
 
-   if(group) {
-      const struct group *grp = getgrnam(group);
-      if(!grp) SHOW_ERROR_AND_EXIT("[config] group not found: %s", group);
-      cfg->gid = grp->gr_gid;
-   }
-
-   cfg->error_log    = g_key_file_get_string(localini, "global", "error_log", &error);
-   cfg->listen       = g_key_file_get_string(localini, "global", "listen", &error);
-   cfg->pool         = g_key_file_get_string(localini, "global", "pool", &error);
-   cfg->extensions   = g_key_file_get_string_list(localini, "global", "extensions", NULL, NULL);
-   cfg->worker_threads = g_key_file_get_integer(localini, "global", "worker_threads", &error);
-   cfg->process_idle_timeout = parse_time(g_key_file_get_string(localini, "global", "process_idle_timeout", &error));
-   cfg->rd_high_watermark = parse_size(g_key_file_get_string(localini, "global", "rd_high_watermark", &error));
-
-   if(!cfg->listen) SHOW_ERROR_AND_EXIT("[config] listen not specified");
-   if(!cfg->pool) SHOW_ERROR_AND_EXIT("[config] pool not specified");
-   if(!cfg->process_idle_timeout) SHOW_ERROR_AND_EXIT("[config] process_idle_timeout not specified");
-   if(!cfg->rd_high_watermark) SHOW_ERROR_AND_EXIT("[config] rd_high_watermark not specified");
+   CFG_LOAD_OPTION(error_log, "global", g_key_file_get_string);
+   CFG_LOAD_OPTION(listen, "global", g_key_file_get_string);
+   CFG_LOAD_OPTION(pool, "global", g_key_file_get_string);
+   CFG_LOAD_OPTION(extensions, "global", cfg_get_string_list);
+   CFG_LOAD_OPTION(process_idle_timeout, "global", g_key_file_get_integer);
+   CFG_LOAD_OPTION(error_log, "global", g_key_file_get_string);
 
    return cfg;
+}
+
+static char **cfg_get_string_list(GKeyFile *keyfile, const gchar* group_name, const gchar *key, GError **error) {
+   return g_key_file_get_string_list(keyfile, group_name, key, NULL, error);
+}
+
+static uid_t cfg_getuid(const char *user) {
+   const struct passwd *pwd = getpwnam(user);
+   if(!pwd) SHOW_ERROR_AND_EXIT("[config] user not found: %s", user);
+   return pwd->pw_uid;
+}
+
+static gid_t cfg_getgid(const char *group) {
+   const struct group *grp = getgrnam(group);
+   if(!grp) SHOW_ERROR_AND_EXIT("[config] group not found: %s", group);
+   return grp->gr_gid;
 }
 
 static void print_help_and_exit(int argc, char **argv) {

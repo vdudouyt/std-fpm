@@ -18,7 +18,8 @@ set(SOURCE_FILES
    src/fcgi_process.c
    src/process_pool.c
    src/events.c
-   src/connect_process.c)
+   src/connect_process.c
+   src/config.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
