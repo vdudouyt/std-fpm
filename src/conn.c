@@ -54,7 +54,10 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc, uv_pipe_t *pipe) {
    }
    ret->process = proc;
 
+   #ifdef DEBUG_LOG
    static unsigned int ctr = 1;
    conn_set_name(ret, "responder_%d", ctr++);
+   #endif
+
    return ret;
 }
