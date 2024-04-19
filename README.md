@@ -4,7 +4,7 @@ A high-performance language-agnostic FastCGI process manager
 * Highly efficient asynchronous event-driven architecture
 * Works with almost any programming language ([C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
 * Dynamically controls FastCGI process population depending on incoming traffic
-* Not getting blocked by frequently exiting FastCGI handlers / slow-running I/Os
+* Not getting blocked with frequent FastCGI handler ``exit()``s, long ``sleep()``s, slow-running I/Os and whatever else
 * Compatible with the most of HTTP server software available
 * Almost no configuration required (see below)
 
