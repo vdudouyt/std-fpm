@@ -12,6 +12,7 @@ struct conn_s {
    uv_pipe_t *pipe;
    struct conn_s *pairedWith;
    unsigned int pendingWrites;
+   bool isConnecting;
 
    #ifdef DEBUG_LOG
    char name[64];

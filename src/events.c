@@ -69,7 +69,8 @@ void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t
       conn->storedBuf.base = buf->base; // TODO: append/realloc
       conn->storedBuf.len = nread;
 
-      if(script_filename) {
+      if(script_filename && !conn->isConnecting) {
+         conn->isConnecting = true;
          stdfpm_connect_process(conn, script_filename);
       }
    } else if(conn->pairedWith) {
