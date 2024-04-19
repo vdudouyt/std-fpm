@@ -38,7 +38,9 @@ void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
    fcgi_process_t *proc = clientConn->process;
    uv_stream_t *processConnHandle = processConnRequest->handle;
 
-   if(status == 0) {
+   if(uv_is_closing((uv_handle_t*) processConnHandle)) {
+      free(clientConn->storedBuf.base);
+   } else if(status == 0) {
       DEBUG("connected to fastcgi process: %s:%s",
          proc->s_un.sun_path, proc->filepath);
 

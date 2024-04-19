@@ -91,13 +91,13 @@ void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    DEBUG("stdfpm_write_completed_cb(status = %d)", status);
    conn->pendingWrites--;
    DEBUG("pendingWrites = %d", conn->pendingWrites);
-   free(req);
 
    if(!conn->pendingWrites && !conn->pairedWith) {
       if(!uv_is_closing((uv_handle_t *)req->handle)) uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
    }
 
-   READ_RESUME(conn->pairedWith->pipe);
+   if(conn->pairedWith) READ_RESUME(conn->pairedWith->pipe);
+   free(req);
 }
 
 void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
@@ -106,6 +106,7 @@ void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    if(conn->pairedWith) {
       if(!conn->pairedWith->pendingWrites && !uv_is_closing((uv_handle_t *) conn->pairedWith->pipe)) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
       conn->pairedWith->pairedWith = NULL;
+      conn->pairedWith = NULL;
    }
    if(conn->type == STDFPM_FCGI_PROCESS) {
       pool_return_process(conn->process);
