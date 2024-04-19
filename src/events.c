@@ -77,6 +77,7 @@ void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t
       uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
       conn->pairedWith->pendingWrites++;
       DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
+      // TODO: do not allocate wreq is uv_is_closing() to prevent memory leaks
       if(!uv_is_closing((uv_handle_t *) conn->pairedWith->pipe)) uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
       uv_read_stop(client);
       free(buf->base);
