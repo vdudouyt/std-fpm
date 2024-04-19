@@ -5,21 +5,10 @@ option(DEBUG_LOG "Produce debug log" OFF)
 project(std-fpm C)
 find_package(PkgConfig REQUIRED)
 pkg_search_module(GLIB REQUIRED glib-2.0)
-pkg_search_module(LIBUV REQUIRED libuv)
 include_directories(${GLIB_INCLUDE_DIRS})
 link_directories(${GLIB_LIBRARY_DIRS})
 
-set(SOURCE_FILES
-   src/main.c
-   src/debug_utils.c
-   src/log.c
-   src/fcgi_parser.c
-   src/conn.c
-   src/fcgi_process.c
-   src/process_pool.c
-   src/events.c
-   src/connect_process.c
-   src/config.c)
+set(SOURCE_FILES src/main.c src/log.c src/fdutils.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
@@ -29,7 +18,7 @@ add_compile_options(-std=gnu99 -Wpointer-sign)
 add_executable(std-fpm ${SOURCE_FILES})
 
 add_definitions(${GLIB_CFLAGS_OTHER} ${GLIB_CFLAGS_OTHER})
-target_link_libraries(std-fpm ${GLIB_LIBRARIES} ${LIBUV_LIBRARIES} -lpthread)
+target_link_libraries(std-fpm ${GLIB_LIBRARIES} -lpthread)
 
 set(CMAKE_INSTALL_PREFIX "")
 install(TARGETS std-fpm DESTINATION usr/sbin/)
