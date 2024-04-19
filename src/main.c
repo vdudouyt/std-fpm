@@ -119,6 +119,7 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
 void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_ondisconnect", ctx->name);
    stdfpm_epoll_ctl(ctx, EPOLL_CTL_DEL, 0);
+   close(ctx->fd);
    ctx->toDelete = true;
 }
 
