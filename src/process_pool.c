@@ -65,7 +65,7 @@ void pool_return_process(fcgi_process_t *proc) {
 static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_data);
 
 void pool_rip_idling(uv_timer_t *handle) {
-   unsigned int process_idle_timeout = 3;
+   unsigned int process_idle_timeout = 5*60;
    pthread_mutex_lock(&pool_mutex);
    g_hash_table_foreach(process_pool, idleripper_visit_bucket, &process_idle_timeout);
    pthread_mutex_unlock(&pool_mutex);
