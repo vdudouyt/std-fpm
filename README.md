@@ -1,6 +1,12 @@
 STD-FPM
 =============
-A high-performance language-agnostic FastCGI process manager with event-driven non-blocking I/O
+A high-performance language-agnostic FastCGI process manager
+* Highly efficient asynchronous event-driven architecture
+* Works with almost any programming language ([C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
+* Dynamically controls FastCGI process population depending on incoming traffic
+* Not getting blocked by frequently exiting FastCGI handlers / slow-running I/Os
+* Compatible with the most of HTTP server software available
+* Almost no configuration required (see below)
 
 ## Comparison with similar software
 |                            | STD-FPM | PHP-FPM | mod_fcgid | spawn-fcgi |
