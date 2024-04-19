@@ -7,16 +7,13 @@
 void stdfpm_connect_process(conn_t *client, const char *script_filename) {
    DEBUG("stdfpm_connect_process(%s, %s)", client->name, script_filename);
    fcgi_process_t *proc = pool_borrow_process(script_filename);
+   client->probeMode = proc ? RETRY_ON_FAILURE : CLOSE_ON_FAILURE;
 
-   if(proc) {
-      client->probeMode = RETRY_ON_FAILURE;
-   } else {
-      client->probeMode = CLOSE_ON_FAILURE;
+   if(!proc) {
       static unsigned int ctr = 0;
       char socket_path[4096];
       ctr++;
       snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", get_config()->pool, ctr);
-
       proc = fcgi_spawn(socket_path, script_filename);
    }
 
