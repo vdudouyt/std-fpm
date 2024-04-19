@@ -47,6 +47,7 @@ typedef struct stdfpm_context_s {
    enum { STDFPM_LISTENER, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
    int fd, epollfd;
    struct stdfpm_context_s *pairedWith;
+   bool toDelete;
 
    #ifdef DEBUG_LOG
    char name[64];
@@ -118,6 +119,7 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
 void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_ondisconnect", ctx->name);
    stdfpm_epoll_ctl(ctx, EPOLL_CTL_DEL, 0);
+   ctx->toDelete = true;
 }
 
 int main(int argc, char **argv) {
@@ -158,8 +160,13 @@ int main(int argc, char **argv) {
          if(pevents[i].events & EPOLLRDHUP) stdfpm_ondisconnect(ctx);
       }
 
+      // TODO: is each ctx guaranteed to appear only once?
       for(int i = 0; i < event_count; i++) {
          stdfpm_context_t *ctx = pevents[i].data.ptr;
+         if(ctx->toDelete) {
+            DEBUG("freeing %s", ctx->name);
+            free(ctx);
+         }
       }
    }
 }
