@@ -24,7 +24,7 @@ void stdfpm_conn_received_cb(uv_stream_t *stream, int status) {
       uv_read_start((uv_stream_t*)client, stdfpm_alloc_buffer, stdfpm_read_completed_cb);
    } else {
       log_write("Accept failed");
-      uv_close((uv_handle_t*) client, NULL);
+      if(!uv_is_closing((uv_handle_t *)client)) uv_close((uv_handle_t*) client, NULL);
    }
 }
 
@@ -39,7 +39,7 @@ void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t
 
    if(nread < 0) {
       nread == UV_EOF ? DEBUG("EOF reached") : log_write("Read error %s", uv_err_name(nread));
-      uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
+      if(!uv_is_closing((uv_handle_t *)client)) uv_close((uv_handle_t*) client, stdfpm_ondisconnect);
    }
 
    if(nread <= 0) {
@@ -77,7 +77,7 @@ void stdfpm_read_completed_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t
       uv_write_t *wreq = (uv_write_t *)malloc(sizeof(uv_write_t));
       conn->pairedWith->pendingWrites++;
       DEBUG("pumping %d bytes from %s to %s", nread, conn->name, conn->pairedWith->name);
-      uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
+      if(!uv_is_closing((uv_handle_t *) conn->pairedWith->pipe)) uv_write((uv_write_t *)wreq, (uv_stream_t *) conn->pairedWith->pipe, &wrbuf, 1, stdfpm_write_completed_cb);
       uv_read_stop(client);
       free(buf->base);
    }
@@ -91,7 +91,7 @@ void stdfpm_write_completed_cb(uv_write_t *req, int status) {
    free(req);
 
    if(!conn->pendingWrites && !conn->pairedWith) {
-      uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
+      if(!uv_is_closing((uv_handle_t *)req->handle)) uv_close((uv_handle_t *) req->handle, stdfpm_ondisconnect);
    }
 
    READ_RESUME(conn->pairedWith->pipe);
@@ -101,7 +101,7 @@ void stdfpm_ondisconnect(uv_handle_t *uvhandle) {
    conn_t *conn = uv_handle_get_data(uvhandle);
    DEBUG("[%s] stdfpm_ondisconnect()", conn->name);
    if(conn->pairedWith) {
-      if(!conn->pairedWith->pendingWrites) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
+      if(!conn->pairedWith->pendingWrites && !uv_is_closing((uv_handle_t *) conn->pairedWith->pipe)) uv_close((uv_handle_t*) conn->pairedWith->pipe, stdfpm_ondisconnect);
       conn->pairedWith->pairedWith = NULL;
    }
    if(conn->type == STDFPM_FCGI_PROCESS) {

@@ -58,14 +58,14 @@ void stdfpm_onupstream_connect(uv_connect_t *processConnRequest, int status) {
       DEBUG("[%s] failed while connecting to fastcgi process, trying the next: %s:%s",
          clientConn->name, proc->s_un.sun_path, proc->filepath);
       stdfpm_connect_process(clientConn, proc->filepath); // frees proc automatically
-      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
+      if(!uv_is_closing((uv_handle_t *)processConnHandle)) uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
    } else if(clientConn->probeMode == CLOSE_ON_FAILURE) {
       log_write("execve() succeeded, yet failed while connecting to fastcgi process. Terminating client's connection: %s",
          proc->filepath);
       free(proc);
       free(clientConn->storedBuf.base);
-      uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
-      uv_close((uv_handle_t*) clientConn->pipe, stdfpm_ondisconnect);
+      if(!uv_is_closing((uv_handle_t *)processConnHandle)) uv_close((uv_handle_t*) processConnHandle, stdfpm_onconnecterror);
+      if(!uv_is_closing((uv_handle_t *)clientConn->pipe)) uv_close((uv_handle_t*) clientConn->pipe, stdfpm_ondisconnect);
    }
 
    free(processConnRequest);
