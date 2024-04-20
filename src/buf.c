@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "buf.h"
+#include <assert.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -20,6 +21,7 @@ static void buf_check_space(stdfpm_buf_t *buf, size_t len) {
       buf->len = len;
    } else if(buf->len < len) {
       buf->base = realloc(buf->base, len);
+      assert(buf->base);
       buf->len = len;
    }
 }
@@ -62,6 +64,7 @@ ssize_t buf_send(stdfpm_buf_t *buf, int fd) {
 }
 
 void buf_move(stdfpm_buf_t *src, stdfpm_buf_t *dst) {
+   if(dst->base) free(dst->base);
    dst->base = src->base;
    dst->readPos = src->readPos;
    dst->writePos = src->writePos;
