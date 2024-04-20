@@ -134,14 +134,25 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
          char socket_path[4096];
          sprintf(socket_path, "/tmp/std-fpm/pool/stdfpm-%d.sock", ctr);
-         fcgi_process_t *proc = pool_borrow_process(script_filename);
+
+         fcgi_process_t *proc;
+         int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
+         fd_setnonblocking(newfd);
+         fd_setcloseonexec(newfd);
+         while(proc = pool_borrow_process(script_filename)) {
+            int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+            if(status == 0 || errno == EINPROGRESS) {
+               break;
+            } else {
+               proc = NULL;
+            }
+         }
          if(!proc) {
             proc = fcgi_spawn(socket_path, script_filename);
+            connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
          }
          DEBUG("proc = %08x", proc);
 
-         int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
-         assert(connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
          stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS, newfd);
          newCtx->process = proc;
          newCtx->epollfd = ctx->epollfd;
