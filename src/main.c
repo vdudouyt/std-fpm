@@ -180,7 +180,7 @@ void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
    ctx->toDelete = true;
 
    if(ctx->pairedWith) {
-      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP); // drag epoll attention on next epoll iteration
+      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP); // drag epoll attention on next epoll iteration
       ctx->pairedWith->toDelete = true;
       ctx->pairedWith->pairedWith = NULL;
       ctx->pairedWith = NULL;
