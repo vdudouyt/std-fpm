@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <assert.h>
 #include <stdarg.h>
 #include "debug.h"
@@ -48,7 +49,7 @@ static int stdfpm_create_listening_socket(const char *sock_path) {
 }
 
 typedef struct stdfpm_context_s {
-   enum { STDFPM_LISTENER, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
+   enum { STDFPM_LISTENER, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS, STDFPM_TIMER } type;
    int fd, epollfd;
    struct stdfpm_context_s *pairedWith;
    bool toDelete;
@@ -119,6 +120,13 @@ void stdfpm_onconnect(stdfpm_context_t *listenCtx) {
 }
 
 void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
+   if(ctx->type == STDFPM_TIMER) {
+      uint64_t times;
+      read(ctx->fd, &times, sizeof(times));
+      pool_rip_idling();
+      return;
+   }
+
    DEBUG("[%s] stdfpm_onsocketreadable", ctx->name);
    ssize_t bytes_read = buf_recv(&ctx->buf, ctx->fd);
    DEBUG("[%s] %ld bytes read", ctx->name, bytes_read);
@@ -212,6 +220,23 @@ int main(int argc, char **argv) {
    stdfpm_epoll_ctl(listenCtx, EPOLL_CTL_ADD, EPOLLIN);
    #ifdef DEBUG_LOG
    stdfpm_context_set_name(listenCtx, "listen_sock");
+   #endif
+
+   int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+   assert(timerfd != -1);
+
+	struct itimerspec ts;
+	ts.it_interval.tv_sec = 60;
+	ts.it_interval.tv_nsec = 0;
+	ts.it_value.tv_sec = 60;
+	ts.it_value.tv_nsec = 0;
+   assert(timerfd_settime(timerfd, 0, &ts, NULL) == 0);
+
+   stdfpm_context_t *timerCtx = stdfpm_create_context(STDFPM_TIMER, timerfd);
+   timerCtx->epollfd = listenCtx->epollfd;
+   stdfpm_epoll_ctl(timerCtx, EPOLL_CTL_ADD, EPOLLIN);
+   #ifdef DEBUG_LOG
+   stdfpm_context_set_name(timerCtx, "timer");
    #endif
 
    const unsigned int EVENTS_COUNT = 20;
