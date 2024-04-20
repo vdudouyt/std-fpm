@@ -15,6 +15,7 @@
 #include "fdutils.h"
 #include "fcgi_parser.h"
 #include "buf.h"
+#include "fcgi_process.h"
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
@@ -124,7 +125,12 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
       char *script_filename = fcgi_get_script_filename(&ctx->fcgiParser);
 
       if(script_filename) {
+         static unsigned int ctr = 0;
+         ctr++;
          DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
+         char socket_path[4096];
+         sprintf(socket_path, "/tmp/std-fpm/pool/stdfpm-%d.sock", ctr);
+         fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
       }
    }
 }
