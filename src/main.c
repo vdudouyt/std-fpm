@@ -179,6 +179,7 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    if(buf_can_write(&ctx->buf) && ctx->pairedWith) {
       buf_move(&ctx->buf, &ctx->pairedWith->buf);
       DEBUG("[%s] switching to send mode: %s", ctx->name, ctx->pairedWith->name);
+      // TODO: full duplex?
       stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLRDHUP);
       stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP);
    }
