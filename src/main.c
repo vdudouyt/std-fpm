@@ -16,6 +16,7 @@
 #include "fcgi_parser.h"
 #include "buf.h"
 #include "fcgi_process.h"
+#include "process_pool.h"
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
@@ -53,6 +54,7 @@ typedef struct stdfpm_context_s {
    bool toDelete;
    stdfpm_buf_t buf;
    fcgi_parser_t fcgiParser;
+   fcgi_process_t *process;
 
    #ifdef DEBUG_LOG
    char name[64];
@@ -132,11 +134,16 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
          char socket_path[4096];
          sprintf(socket_path, "/tmp/std-fpm/pool/stdfpm-%d.sock", ctr);
-         fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
+         fcgi_process_t *proc = pool_borrow_process(script_filename);
+         if(!proc) {
+            proc = fcgi_spawn(socket_path, script_filename);
+         }
+         DEBUG("proc = %08x", proc);
 
          int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
          assert(connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
          stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS, newfd);
+         newCtx->process = proc;
          newCtx->epollfd = ctx->epollfd;
          stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT | EPOLLRDHUP);
          ctx->pairedWith = newCtx;
@@ -182,6 +189,7 @@ void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
 
 int main(int argc, char **argv) {
    log_set_echo(true);
+   pool_init();
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
 
@@ -227,6 +235,9 @@ int main(int argc, char **argv) {
             int ret = close(ctx->fd);
             if(ret == 0) DEBUG("[%s] closed successfully: %d", ctx->name, ctx->fd);
             buf_release(&ctx->buf);
+            if(ctx->process) {
+               pool_return_process(ctx->process);
+            }
             free(ctx);
          }
       }

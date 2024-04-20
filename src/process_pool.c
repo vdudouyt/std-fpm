@@ -6,7 +6,6 @@
 #include <string.h>
 #include <gmodule.h>
 #include <unistd.h>
-#include <uv.h>
 #include "fdutils.h"
 #include "log.h"
 #include "debug.h"
@@ -60,30 +59,4 @@ void pool_return_process(fcgi_process_t *proc) {
 
    g_queue_push_head(q, proc);
    pthread_mutex_unlock(&pool_mutex);
-}
-
-static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_data);
-
-void pool_rip_idling(uv_timer_t *handle) {
-   unsigned int process_idle_timeout = 5*60;
-   pthread_mutex_lock(&pool_mutex);
-   g_hash_table_foreach(process_pool, idleripper_visit_bucket, &process_idle_timeout);
-   pthread_mutex_unlock(&pool_mutex);
-}
-
-static void idleripper_visit_bucket(gpointer key, gpointer value, gpointer user_data) {
-   unsigned int max_idling_time = *(unsigned int*) user_data;
-   GQueue *q = value;
-   fcgi_process_t *proc;
-   time_t curtime = time(NULL);
-
-   while(proc = g_queue_peek_tail(q)) {
-      if(curtime - proc->last_used < max_idling_time) {
-         break;
-      }
-      DEBUG("[process pool] removing idle process: %s", key);
-      kill(proc->pid, SIGTERM); // TODO: can it hang?
-      free(proc);
-      g_queue_pop_tail(q);
-   }
 }
