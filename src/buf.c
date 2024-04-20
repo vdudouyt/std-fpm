@@ -61,6 +61,14 @@ ssize_t buf_send(stdfpm_buf_t *buf, int fd) {
    if(buf->readPos == buf->writePos) buf_reset(buf);
 }
 
+void buf_move(stdfpm_buf_t *src, stdfpm_buf_t *dst) {
+   dst->base = src->base;
+   dst->readPos = src->readPos;
+   dst->writePos = src->writePos;
+   src->base = NULL;
+   buf_reset(src);
+}
+
 void buf_release(stdfpm_buf_t *buf) {
    if(buf->base) {
       free(buf->base);

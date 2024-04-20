@@ -19,3 +19,4 @@ void buf_write(stdfpm_buf_t *buf, const char *src, size_t len);
 void buf_release(stdfpm_buf_t *buf);
 ssize_t buf_recv(stdfpm_buf_t *buf, int fd);
 ssize_t buf_send(stdfpm_buf_t *buf, int fd);
+void buf_move(stdfpm_buf_t *src, stdfpm_buf_t *dst);
