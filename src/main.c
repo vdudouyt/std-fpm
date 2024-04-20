@@ -179,6 +179,7 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    if(buf_can_write(&ctx->buf) && ctx->pairedWith) {
       buf_move(&ctx->buf, &ctx->pairedWith->buf);
       DEBUG("[%s] switching to send mode: %s", ctx->name, ctx->pairedWith->name);
+      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLRDHUP);
       stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP);
    }
 }
@@ -192,6 +193,7 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
    if(buf_can_write(&ctx->buf)) {
       DEBUG("[%s] switching to recv mode", ctx->name);
       stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP);
+      if(ctx->pairedWith) stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP);
    }
 }
 
