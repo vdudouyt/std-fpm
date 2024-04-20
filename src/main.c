@@ -131,6 +131,11 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          char socket_path[4096];
          sprintf(socket_path, "/tmp/std-fpm/pool/stdfpm-%d.sock", ctr);
          fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
+
+         stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS);
+         newCtx->epollfd = ctx->epollfd;
+         newCtx->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+         assert(connect(newCtx->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
       }
    }
 }
