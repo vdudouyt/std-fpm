@@ -116,8 +116,10 @@ static stdfpm_context_t *stdfpm_accept(stdfpm_context_t *listenCtx) {
 
 void stdfpm_onconnect(stdfpm_context_t *listenCtx) {
    stdfpm_context_t *newctx = stdfpm_accept(listenCtx);
-   stdfpm_epoll_ctl(newctx, EPOLL_CTL_ADD, EPOLLIN | EPOLLRDHUP);
+   stdfpm_epoll_ctl(newctx, EPOLL_CTL_ADD, EPOLLIN);
 }
+
+static void stdfpm_ondisconnect(stdfpm_context_t *ctx);
 
 void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    if(ctx->type == STDFPM_TIMER) {
@@ -130,6 +132,7 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_onsocketreadable", ctx->name);
    ssize_t bytes_read = buf_recv(&ctx->buf, ctx->fd);
    DEBUG("[%s] %ld bytes read", ctx->name, bytes_read);
+   if(bytes_read == 0) stdfpm_ondisconnect(ctx);
    if(bytes_read <= 0) return;
 
    if(ctx->type == STDFPM_FCGI_CLIENT) {
@@ -165,7 +168,7 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS, newfd);
          newCtx->process = proc;
          newCtx->epollfd = ctx->epollfd;
-         stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT | EPOLLRDHUP);
+         stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT);
          ctx->pairedWith = newCtx;
          newCtx->pairedWith = ctx;
 
@@ -180,8 +183,8 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
       buf_move(&ctx->buf, &ctx->pairedWith->buf);
       DEBUG("[%s] switching to send mode: %s", ctx->name, ctx->pairedWith->name);
       // TODO: full duplex?
-      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLRDHUP);
-      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP);
+      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, 0);
+      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT);
    }
 }
 
@@ -193,8 +196,8 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
    }
    if(buf_can_write(&ctx->buf)) {
       DEBUG("[%s] switching to recv mode", ctx->name);
-      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP);
-      if(ctx->pairedWith) stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP);
+      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLIN);
+      if(ctx->pairedWith) stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLIN);
    }
 }
 
@@ -203,7 +206,7 @@ void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
    ctx->toDelete = true;
 
    if(ctx->pairedWith) {
-      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP); // drag epoll attention on next epoll iteration
+      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT); // drag epoll attention on next epoll iteration
       ctx->pairedWith->toDelete = true;
       ctx->pairedWith->pairedWith = NULL;
       ctx->pairedWith = NULL;
@@ -263,13 +266,12 @@ int main(int argc, char **argv) {
          }
          if(pevents[i].events & EPOLLIN) stdfpm_onsocketreadable(ctx);
          if(pevents[i].events & EPOLLOUT) stdfpm_onsocketwriteable(ctx);
-         if(pevents[i].events & EPOLLRDHUP) stdfpm_ondisconnect(ctx);
       }
 
       // TODO: is each ctx guaranteed to appear only once?
       for(int i = 0; i < event_count; i++) {
          stdfpm_context_t *ctx = pevents[i].data.ptr;
-         if(ctx->toDelete) {
+         if(ctx->toDelete && !ctx->pairedWith && ctx->buf.readPos == ctx->buf.writePos) {
             DEBUG("freeing %s", ctx->name);
             stdfpm_epoll_ctl(ctx, EPOLL_CTL_DEL, 0);
             int ret = close(ctx->fd);
