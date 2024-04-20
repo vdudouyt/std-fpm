@@ -70,9 +70,12 @@ static void stdfpm_epoll_ctl(stdfpm_context_t *ctx, int op, uint32_t events) {
    }
 }
 
-static stdfpm_context_t *stdfpm_create_context(unsigned int type) {
+static stdfpm_context_t *stdfpm_create_context(unsigned int type, int fd) {
    stdfpm_context_t *ctx = malloc(sizeof(stdfpm_context_t));
    memset(ctx, 0, sizeof(stdfpm_context_t));
+   fd_setnonblocking(fd);
+   fd_setcloseonexec(fd);
+   ctx->fd = fd;
    ctx->type = type;
    fd_setnonblocking(ctx->fd);
    fd_setcloseonexec(ctx->fd);
@@ -96,15 +99,14 @@ static stdfpm_context_t *stdfpm_accept(stdfpm_context_t *listenCtx) {
    unsigned int len = sizeof(client_sockaddr);
    int client_sock = accept(listenCtx->fd, (struct sockaddr *) &client_sockaddr, &len);
    if(client_sock == -1) RETURN_ERROR("[fd_ctx] failed while accepting socket");
-   stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_CLIENT);
-   newCtx->fd = client_sock;
+   stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_CLIENT, client_sock);
    newCtx->epollfd = listenCtx->epollfd;
    fcgi_parser_init(&newCtx->fcgiParser);
    #ifdef DEBUG_LOG
    static int ctr = 0;
    ctr++;
    stdfpm_context_set_name(newCtx, "client_%d", ctr);
-   DEBUG("[%s] client accepted: %s", listenCtx->name, newCtx->name);
+   DEBUG("[%s] client accepted: %s %d", listenCtx->name, newCtx->name, newCtx->fd);
    #endif
    return newCtx;
 }
@@ -132,10 +134,10 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          sprintf(socket_path, "/tmp/std-fpm/pool/stdfpm-%d.sock", ctr);
          fcgi_process_t *proc = fcgi_spawn(socket_path, script_filename);
 
-         stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS);
+         int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
+         assert(connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
+         stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_PROCESS, newfd);
          newCtx->epollfd = ctx->epollfd;
-         newCtx->fd = socket(AF_UNIX, SOCK_STREAM, 0);
-         assert(connect(newCtx->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
          stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT | EPOLLRDHUP);
          ctx->pairedWith = newCtx;
          newCtx->pairedWith = ctx;
@@ -169,6 +171,13 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
 void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_ondisconnect", ctx->name);
    ctx->toDelete = true;
+
+   if(ctx->pairedWith) {
+      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP); // drag epoll attention on next epoll iteration
+      ctx->pairedWith->toDelete = true;
+      ctx->pairedWith->pairedWith = NULL;
+      ctx->pairedWith = NULL;
+   }
 }
 
 int main(int argc, char **argv) {
@@ -176,9 +185,9 @@ int main(int argc, char **argv) {
    signal(SIGPIPE, SIG_IGN);
    signal(SIGCHLD, SIG_IGN);
 
-   stdfpm_context_t *listenCtx = stdfpm_create_context(STDFPM_LISTENER);
-   listenCtx->fd = stdfpm_create_listening_socket("/tmp/std-fpm.sock");
-   assert(listenCtx->fd != -1);
+   int listenfd = stdfpm_create_listening_socket("/tmp/std-fpm.sock");
+   assert(listenfd != -1);
+   stdfpm_context_t *listenCtx = stdfpm_create_context(STDFPM_LISTENER, listenfd);
    listenCtx->epollfd = epoll_create(0xCAFE);
    assert(listenCtx->epollfd != -1);
    stdfpm_epoll_ctl(listenCtx, EPOLL_CTL_ADD, EPOLLIN);
@@ -215,7 +224,8 @@ int main(int argc, char **argv) {
          if(ctx->toDelete) {
             DEBUG("freeing %s", ctx->name);
             stdfpm_epoll_ctl(ctx, EPOLL_CTL_DEL, 0);
-            close(ctx->fd);
+            int ret = close(ctx->fd);
+            if(ret == 0) DEBUG("[%s] closed successfully: %d", ctx->name, ctx->fd);
             buf_release(&ctx->buf);
             free(ctx);
          }
