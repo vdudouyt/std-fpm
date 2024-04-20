@@ -136,12 +136,25 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          newCtx->epollfd = ctx->epollfd;
          newCtx->fd = socket(AF_UNIX, SOCK_STREAM, 0);
          assert(connect(newCtx->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
+         stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT | EPOLLRDHUP);
+
+         #ifdef DEBUG_LOG
+         stdfpm_context_set_name(newCtx, "responder_%d", ctr);
+         DEBUG("[%s] client accepted: %s", ctx->name, newCtx->name);
+         #endif
       }
    }
 }
 
 void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_onsocketwriteable", ctx->name);
+   if(buf_can_read(&ctx->buf)) {
+      DEBUG("[%s] sending", ctx->name);
+   }
+   if(buf_can_write(&ctx->buf)) {
+      DEBUG("[%s] switching to recv mode", ctx->name);
+      stdfpm_epoll_ctl(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP);
+   }
 }
 
 void stdfpm_ondisconnect(stdfpm_context_t *ctx) {
