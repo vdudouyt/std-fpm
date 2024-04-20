@@ -13,6 +13,7 @@
 #include "debug.h"
 #include "log.h"
 #include "fdutils.h"
+#include "fcgi_parser.h"
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
@@ -48,6 +49,8 @@ typedef struct stdfpm_context_s {
    int fd, epollfd;
    struct stdfpm_context_s *pairedWith;
    bool toDelete;
+   char buf[4096];
+   fcgi_parser_t fcgiParser;
 
    #ifdef DEBUG_LOG
    char name[64];
@@ -94,6 +97,7 @@ static stdfpm_context_t *stdfpm_accept(stdfpm_context_t *listenCtx) {
    stdfpm_context_t *newCtx = stdfpm_create_context(STDFPM_FCGI_CLIENT);
    newCtx->fd = client_sock;
    newCtx->epollfd = listenCtx->epollfd;
+   fcgi_parser_init(&newCtx->fcgiParser);
    #ifdef DEBUG_LOG
    static int ctr = 0;
    ctr++;
@@ -110,6 +114,15 @@ void stdfpm_onconnect(stdfpm_context_t *listenCtx) {
 
 void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_onsocketreadable", ctx->name);
+   int bytes_read = read(ctx->fd, ctx->buf, 4096);
+   DEBUG("[%s] %d bytes read", ctx->name, bytes_read);
+   if(bytes_read <= 0) return;
+
+   fcgi_parse(&ctx->fcgiParser, ctx->buf, bytes_read);
+   char *script_filename = fcgi_get_script_filename(&ctx->fcgiParser);
+   if(script_filename) {
+      DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
+   }
 }
 
 void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {

@@ -8,7 +8,7 @@ pkg_search_module(GLIB REQUIRED glib-2.0)
 include_directories(${GLIB_INCLUDE_DIRS})
 link_directories(${GLIB_LIBRARY_DIRS})
 
-set(SOURCE_FILES src/main.c src/log.c src/fdutils.c)
+set(SOURCE_FILES src/main.c src/log.c src/fdutils.c src/fcgi_parser.c)
 
 if(DEBUG_LOG)
    add_compile_options(-DDEBUG_LOG)
