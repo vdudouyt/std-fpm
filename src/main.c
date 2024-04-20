@@ -137,13 +137,20 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
          newCtx->fd = socket(AF_UNIX, SOCK_STREAM, 0);
          assert(connect(newCtx->fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) != -1);
          stdfpm_epoll_ctl(newCtx, EPOLL_CTL_ADD, EPOLLOUT | EPOLLRDHUP);
-         buf_move(&ctx->buf, &newCtx->buf);
+         ctx->pairedWith = newCtx;
+         newCtx->pairedWith = ctx;
 
          #ifdef DEBUG_LOG
          stdfpm_context_set_name(newCtx, "responder_%d", ctr);
          DEBUG("[%s] client accepted: %s", ctx->name, newCtx->name);
          #endif
       }
+   }
+
+   if(buf_can_write(&ctx->buf) && ctx->pairedWith) {
+      buf_move(&ctx->buf, &ctx->pairedWith->buf);
+      DEBUG("[%s] switching to send mode: %s", ctx->name, ctx->pairedWith->name);
+      stdfpm_epoll_ctl(ctx->pairedWith, EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP);
    }
 }
 
