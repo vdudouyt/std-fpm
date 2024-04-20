@@ -14,6 +14,7 @@
 #include "log.h"
 #include "fdutils.h"
 #include "fcgi_parser.h"
+#include "buf.h"
 
 #define EXIT_WITH_ERROR(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); exit(-1); }
 
@@ -49,7 +50,7 @@ typedef struct stdfpm_context_s {
    int fd, epollfd;
    struct stdfpm_context_s *pairedWith;
    bool toDelete;
-   char buf[4096];
+   stdfpm_buf_t buf;
    fcgi_parser_t fcgiParser;
 
    #ifdef DEBUG_LOG
@@ -114,14 +115,17 @@ void stdfpm_onconnect(stdfpm_context_t *listenCtx) {
 
 void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_onsocketreadable", ctx->name);
-   int bytes_read = read(ctx->fd, ctx->buf, 4096);
-   DEBUG("[%s] %d bytes read", ctx->name, bytes_read);
+   ssize_t bytes_read = buf_recv(&ctx->buf, ctx->fd);
+   DEBUG("[%s] %ld bytes read", ctx->name, bytes_read);
    if(bytes_read <= 0) return;
 
-   fcgi_parse(&ctx->fcgiParser, ctx->buf, bytes_read);
-   char *script_filename = fcgi_get_script_filename(&ctx->fcgiParser);
-   if(script_filename) {
-      DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
+   if(ctx->type == STDFPM_FCGI_CLIENT) {
+      fcgi_parse(&ctx->fcgiParser, ctx->buf.lastWrite, ctx->buf.lastWriteLen);
+      char *script_filename = fcgi_get_script_filename(&ctx->fcgiParser);
+
+      if(script_filename) {
+         DEBUG("[%s] parsed script_filename: %s", ctx->name, script_filename);
+      }
    }
 }
 
@@ -179,6 +183,7 @@ int main(int argc, char **argv) {
             DEBUG("freeing %s", ctx->name);
             stdfpm_epoll_ctl(ctx, EPOLL_CTL_DEL, 0);
             close(ctx->fd);
+            buf_release(&ctx->buf);
             free(ctx);
          }
       }
