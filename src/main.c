@@ -152,6 +152,7 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
             if(status == 0 || errno == EINPROGRESS) {
                break;
             } else {
+               free(proc);
                proc = NULL;
             }
          }
