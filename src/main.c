@@ -192,7 +192,7 @@ void stdfpm_onsocketwriteable(stdfpm_context_t *ctx) {
    DEBUG("[%s] stdfpm_onsocketwriteable", ctx->name);
    if(buf_can_read(&ctx->buf)) {
       DEBUG("[%s] sending %ld bytes", ctx->name, ctx->buf.writePos - ctx->buf.readPos);
-      buf_send(&ctx->buf, ctx->fd);
+      if(buf_send(&ctx->buf, ctx->fd) <= 0) buf_reset(&ctx->buf);
    }
    if(buf_can_write(&ctx->buf)) {
       DEBUG("[%s] switching to recv mode", ctx->name);
