@@ -52,7 +52,7 @@ typedef struct stdfpm_context_s {
    enum { STDFPM_LISTENER, STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS, STDFPM_TIMER } type;
    int fd, epollfd;
    struct stdfpm_context_s *pairedWith;
-   bool toDelete;
+   bool toDelete, gotScriptFilename;
    stdfpm_buf_t buf;
    fcgi_parser_t fcgiParser;
    fcgi_process_t *process;
@@ -135,7 +135,8 @@ void stdfpm_onsocketreadable(stdfpm_context_t *ctx) {
    if(bytes_read == 0) stdfpm_ondisconnect(ctx);
    if(bytes_read <= 0) return;
 
-   if(ctx->type == STDFPM_FCGI_CLIENT) {
+   if(ctx->type == STDFPM_FCGI_CLIENT && !ctx->gotScriptFilename) {
+      ctx->gotScriptFilename = true;
       fcgi_parse(&ctx->fcgiParser, ctx->buf.lastWrite, ctx->buf.lastWriteLen);
       char *script_filename = fcgi_get_script_filename(&ctx->fcgiParser);
 
