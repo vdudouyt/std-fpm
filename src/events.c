@@ -6,6 +6,12 @@
 #include "process_pool.h"
 #include "fcgi_writer.h"
 
+#include <sys/stat.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
+#include <event2/listener.h>
+#include <event2/util.h>
+
 static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr);
 static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr);
 static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr);
@@ -13,15 +19,31 @@ static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *user
 static void onfcgiparam(const char *key, const char *value, void *userdata);
 static bool stdfpm_allowed_extension(const char *filename, char **extensions);
 static void stdfpm_disconnect(conn_t *conn);
+static void stdfpm_socket_accepted_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *a, int slen, void *p);
 
-void stdfpm_socket_accepted_cb(worker_t *worker, int fd) {
+struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path, stdfpm_config_t *config) {
+   struct sockaddr_un s_un;
+   s_un.sun_family = AF_UNIX;
+   strcpy(s_un.sun_path, sock_path);
+   unlink(s_un.sun_path); // Socket is in use, prepare for binding
+
+   struct evconnlistener *ret = evconnlistener_new_bind(base, stdfpm_socket_accepted_cb, config,
+       LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC,
+       -1, (struct sockaddr*) &s_un, sizeof(s_un));
+   chmod(s_un.sun_path, 0777);
+   return ret;
+}
+
+static void stdfpm_socket_accepted_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *a, int slen, void *p) {
    DEBUG("stdfpm_accept_conn()");
+   struct event_base *base = evconnlistener_get_base(listener);
+   stdfpm_config_t *config = p;
 
-   struct bufferevent *bev = bufferevent_socket_new(worker->base, fd,
+   struct bufferevent *bev = bufferevent_socket_new(base, fd,
       BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
 
    conn_t *conn = fd_new_client_conn(bev);
-   conn->worker = worker;
+   conn->config = config;
    conn->client->msg_parser->callback = onfcgimessage;
    conn->client->params_parser->callback = onfcgiparam;
 
@@ -100,7 +122,7 @@ static void onfcgiparam(const char *key, const char *value, void *userdata) {
       const char pre[] = "proxy:fcgi://localhost/";
       if(!strncmp(pre, value, strlen(pre))) value = &value[strlen(pre)];
 
-      if(!stdfpm_allowed_extension(value, conn->worker->config->extensions)) {
+      if(!stdfpm_allowed_extension(value, conn->config->extensions)) {
          char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
          fcgi_send_response(conn, response, strlen(response));
          return;

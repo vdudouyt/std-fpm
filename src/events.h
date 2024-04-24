@@ -1,5 +1,5 @@
 #pragma once
-#include "worker.h"
 #include "conn.h"
+#include "config.h"
 
-void stdfpm_socket_accepted_cb(worker_t *worker, int fd);
+struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path, stdfpm_config_t *config);

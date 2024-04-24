@@ -11,7 +11,6 @@ link_directories(${GLIB_LIBRARY_DIRS})
 
 set(SOURCE_FILES 
    src/main.c
-   src/worker.c
    src/events.c
    src/fcgi_params_parser.c
    src/fcgi_parser.c
