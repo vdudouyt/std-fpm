@@ -137,7 +137,8 @@ static void onfcgiparam(const char *key, const char *value, void *userdata) {
       }
 
       conn_t *newconn = fd_new_process_conn(proc);
-      conn_bidirectional_pipe(conn, newconn);
+      newconn->pairedWith = conn;
+      conn->pairedWith = newconn;
       DEBUG("Started child process: %s", newconn->name);
 
       struct evbuffer *dst = bufferevent_get_output(newconn->bev);

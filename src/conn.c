@@ -87,8 +87,3 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc) {
    conn_set_name(ret, "responder_%d", ctr++);
    return ret;
 }
-
-void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2) {
-   conn2->pairedWith = conn1;
-   conn1->pairedWith = conn2;
-}
