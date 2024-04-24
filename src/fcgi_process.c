@@ -57,8 +57,6 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       ret->pid = pid;
       return ret;
    } else if(pid == 0) {
-      free(ret);
-
       char *dirpath, *basename, *rel_basename;
       parse_path(path, &dirpath, &basename, &rel_basename);
       DEBUG("Parsed path: path = %s, dirpath = %s, basename = %s, rel_basename = %s", path, dirpath, basename, rel_basename);
@@ -99,6 +97,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
       close(listen_sock);
       close(STDIN_FILENO);
       unlink(ret->s_un.sun_path);
+      free(ret);
       exit(-1);
    } else {
       log_write("[fastcgi spawner] fork failed: %s", strerror(errno));
