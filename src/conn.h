@@ -21,7 +21,7 @@ struct conn_s {
    stdfpm_config_t *config;
    struct bufferevent *bev;
    enum { STDFPM_FCGI_CLIENT, STDFPM_FCGI_PROCESS } type;
-   struct conn_s *pipeTo;
+   struct conn_s *pairedWith;
    bool closeAfterWrite;
 
    #ifdef DEBUG_LOG

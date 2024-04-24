@@ -89,6 +89,6 @@ conn_t *fd_new_process_conn(fcgi_process_t *proc) {
 }
 
 void conn_bidirectional_pipe(conn_t *conn1, conn_t *conn2) {
-   conn2->pipeTo = conn1;
-   conn1->pipeTo = conn2;
+   conn2->pairedWith = conn1;
+   conn1->pairedWith = conn2;
 }

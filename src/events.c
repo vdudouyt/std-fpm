@@ -57,15 +57,15 @@ static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr) {
    size_t len = evbuffer_get_length(src);
    DEBUG("[%s] %ld bytes received", conn->name, len);
 
-   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pipeTo) {
+   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith) {
       DEBUG("[%s] exposed %d bytes to FastCGI parser", conn->name, len);
       unsigned char *bytes = evbuffer_pullup(src, -1);
       fcgi_parser_write(conn->client->msg_parser, bytes, len);
    }
 
-   if(conn->pipeTo) {
-      DEBUG("[%s] enqueued %d bytes into %s", conn->name, len, conn->pipeTo->name);
-      struct evbuffer *dst = bufferevent_get_output(conn->pipeTo->bev);
+   if(conn->pairedWith) {
+      DEBUG("[%s] enqueued %d bytes into %s", conn->name, len, conn->pairedWith->name);
+      struct evbuffer *dst = bufferevent_get_output(conn->pairedWith->bev);
 	   evbuffer_add_buffer(dst, src);
    } else if(conn->type == STDFPM_FCGI_CLIENT) {
       DEBUG("[%s] enqueued %d bytes into inMemoryBuf", conn->name, len);
@@ -80,7 +80,7 @@ static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr) {
    conn_t *conn = ptr;
    struct evbuffer *dst = bufferevent_get_output(conn->bev);
    size_t remains = evbuffer_get_length(dst);
-   DEBUG("[%s] write completed, %d bytes remains in buffer. pipeTo = %08x", conn->name, remains, conn->pipeTo);
+   DEBUG("[%s] write completed, %d bytes remains in buffer. pairedWith = %08x", conn->name, remains, conn->pairedWith);
    if(conn->closeAfterWrite && !remains) {
       DEBUG("[%s] disconnecting by closeAfterWrite", conn->name);
       stdfpm_disconnect(conn);
@@ -155,16 +155,16 @@ static void stdfpm_disconnect(conn_t *conn) {
    if(conn->process) {
       pool_release_process(conn->process);
    }
-   if(conn->pipeTo) {
-      conn->pipeTo->pipeTo = NULL;
-      struct evbuffer *dst = bufferevent_get_output(conn->pipeTo->bev);
+   if(conn->pairedWith) {
+      conn->pairedWith->pairedWith = NULL;
+      struct evbuffer *dst = bufferevent_get_output(conn->pairedWith->bev);
       size_t remains = evbuffer_get_length(dst);
       if(remains > 0) {
-         DEBUG("[%s] partner %s has %d bytes remaining to write", conn->name, conn->pipeTo->name, remains);
-         conn->pipeTo->closeAfterWrite = true;
+         DEBUG("[%s] partner %s has %d bytes remaining to write", conn->name, conn->pairedWith->name, remains);
+         conn->pairedWith->closeAfterWrite = true;
       } else {
-         DEBUG("[%s] partner %s has %d bytes remaining to write, disconnecting it", conn->name, conn->pipeTo->name, remains);
-         stdfpm_disconnect(conn->pipeTo);
+         DEBUG("[%s] partner %s has %d bytes remaining to write, disconnecting it", conn->name, conn->pairedWith->name, remains);
+         stdfpm_disconnect(conn->pairedWith);
       }
    }
    bufferevent_setcb(conn->bev, NULL, NULL, NULL, NULL);
