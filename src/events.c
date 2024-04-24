@@ -167,6 +167,7 @@ static void stdfpm_disconnect(conn_t *conn) {
          DEBUG("[%s] partner %s has %d bytes remaining to write, disconnecting it", conn->name, conn->pairedWith->name, remains);
          stdfpm_disconnect(conn->pairedWith);
       }
+      conn->pairedWith = NULL;
    }
    bufferevent_setcb(conn->bev, NULL, NULL, NULL, NULL);
    DEBUG("Disconnecting %s", conn->name);
