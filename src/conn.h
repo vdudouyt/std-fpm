@@ -5,15 +5,14 @@
 #include <stdbool.h>
 #include "fcgi_process.h"
 #include "fcgi_parser.h"
-#include "fcgi_params_parser.h"
 #include "config.h"
 
 typedef struct conn_s conn_t;
 typedef struct fcgi_client_s fcgi_client_t;
 
 struct fcgi_client_s {
-   fcgi_parser_t *msg_parser;
-   fcgi_params_parser_t *params_parser;
+   fcgi_parser_t fcgiParser;
+   char *scriptFilename;
    struct evbuffer *inMemoryBuf;
 };
 

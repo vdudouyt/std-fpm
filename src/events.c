@@ -15,11 +15,10 @@
 static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr);
 static void stdfpm_write_completed_cb(struct bufferevent *bev, void *ptr);
 static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr);
-static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata);
-static void onfcgiparam(const char *key, const char *value, void *userdata);
 static bool stdfpm_allowed_extension(const char *filename, char **extensions);
 static void stdfpm_disconnect(conn_t *conn);
 static void stdfpm_socket_accepted_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *a, int slen, void *p);
+static void stdfpm_start_process(conn_t *conn, const char *scriptFilename);
 
 struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path, stdfpm_config_t *config) {
    struct sockaddr_un s_un;
@@ -44,8 +43,6 @@ static void stdfpm_socket_accepted_cb(struct evconnlistener *listener, evutil_so
 
    conn_t *conn = fd_new_client_conn(bev);
    conn->config = config;
-   conn->client->msg_parser->callback = onfcgimessage;
-   conn->client->params_parser->callback = onfcgiparam;
 
    bufferevent_setcb(bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, conn);
    bufferevent_enable(bev, EV_READ|EV_WRITE);
@@ -57,10 +54,15 @@ static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr) {
    size_t len = evbuffer_get_length(src);
    DEBUG("[%s] %ld bytes received", conn->name, len);
 
-   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith) {
+   if(conn->type == STDFPM_FCGI_CLIENT && !conn->pairedWith && !conn->client->scriptFilename) {
       DEBUG("[%s] exposed %d bytes to FastCGI parser", conn->name, len);
-      unsigned char *bytes = evbuffer_pullup(src, -1);
-      fcgi_parser_write(conn->client->msg_parser, bytes, len);
+      char *bytes = (char*) evbuffer_pullup(src, -1);
+      fcgi_parse(&conn->client->fcgiParser, bytes, len);
+      conn->client->scriptFilename = fcgi_get_script_filename(&conn->client->fcgiParser);
+
+      if(conn->client->scriptFilename) {
+         stdfpm_start_process(conn, conn->client->scriptFilename);
+      }
    }
 
    if(conn->pairedWith) {
@@ -96,58 +98,38 @@ static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr) {
    }
 }
 
-static void onfcgimessage(const fcgi_header_t *hdr, const char *data, void *userdata) {
-   conn_t *conn = userdata;
+static void stdfpm_start_process(conn_t *conn, const char *scriptFilename) {
+   DEBUG("[%s] got script filename: %s", conn->name, scriptFilename);
 
-   DEBUG("[%s] got fcgi message: { type = %s, requestId = 0x%02x, contentLength = %d }",
-      conn->name, fcgitype_to_string(hdr->type), hdr->requestId, hdr->contentLength);
+   // Apache
+   const char pre[] = "proxy:fcgi://localhost/";
+   if(!strncmp(pre, scriptFilename, strlen(pre))) scriptFilename = &scriptFilename[strlen(pre)];
 
-   if(hdr->contentLength) {
-      char escaped_data[4*65536+1];
-      escape(escaped_data, data, hdr->contentLength);
-      DEBUG("[%s] message content: \"%s\"", conn->name, escaped_data);
+   if(!stdfpm_allowed_extension(scriptFilename, conn->config->extensions)) {
+      char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
+      fcgi_send_response(conn, response, strlen(response));
+      return;
    }
 
-   if(hdr->type == FCGI_PARAMS) {
-      fcgi_params_parser_write(conn->client->params_parser, data, hdr->contentLength);
+   struct event_base *base = bufferevent_get_base(conn->bev);
+   fcgi_process_t *proc = pool_borrow_process(base, scriptFilename);
+
+   if(!proc) {
+      DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
+      return;
    }
-}
 
-static void onfcgiparam(const char *key, const char *value, void *userdata) {
-   conn_t *conn = userdata;
-   if(!strcmp(key, "SCRIPT_FILENAME")) {
-      DEBUG("[%s] got script filename: %s", conn->name, value);
+   conn_t *newconn = fd_new_process_conn(proc);
+   newconn->pairedWith = conn;
+   conn->pairedWith = newconn;
+   DEBUG("Started child process: %s", newconn->name);
 
-      // Apache
-      const char pre[] = "proxy:fcgi://localhost/";
-      if(!strncmp(pre, value, strlen(pre))) value = &value[strlen(pre)];
+   struct evbuffer *dst = bufferevent_get_output(newconn->bev);
+   DEBUG("[%s] took %d bytes from %s inMemoryBuf", newconn->name, evbuffer_get_length(dst), conn->name);
+   evbuffer_add_buffer(dst, conn->client->inMemoryBuf);
 
-      if(!stdfpm_allowed_extension(value, conn->config->extensions)) {
-         char response[] = "Status: 403\nContent-type: text/html\n\nExtension is not allowed.";
-         fcgi_send_response(conn, response, strlen(response));
-         return;
-      }
-
-      struct event_base *base = bufferevent_get_base(conn->bev);
-      fcgi_process_t *proc = pool_borrow_process(base, value);
-
-      if(!proc) {
-         DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
-         return;
-      }
-
-      conn_t *newconn = fd_new_process_conn(proc);
-      newconn->pairedWith = conn;
-      conn->pairedWith = newconn;
-      DEBUG("Started child process: %s", newconn->name);
-
-      struct evbuffer *dst = bufferevent_get_output(newconn->bev);
-      DEBUG("[%s] took %d bytes from %s inMemoryBuf", newconn->name, evbuffer_get_length(dst), conn->name);
-	   evbuffer_add_buffer(dst, conn->client->inMemoryBuf);
-
-      bufferevent_setcb(newconn->bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, newconn);
-      bufferevent_enable(newconn->bev, EV_READ|EV_WRITE);
-   }
+   bufferevent_setcb(newconn->bev, stdfpm_read_completed_cb, stdfpm_write_completed_cb, stdfpm_event_cb, newconn);
+   bufferevent_enable(newconn->bev, EV_READ|EV_WRITE);
 }
 
 static void stdfpm_disconnect(conn_t *conn) {

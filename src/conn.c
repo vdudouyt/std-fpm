@@ -34,8 +34,6 @@ void conn_set_name(conn_t *this, const char *fmt, ...) {
 
 void conn_free(conn_t *this) {
    if(this->client) {
-      fcgi_parser_free(this->client->msg_parser);
-      fcgi_params_parser_free(this->client->params_parser);
       evbuffer_free(this->client->inMemoryBuf);
       free(this->client);
    }
@@ -53,20 +51,12 @@ conn_t *fd_new_client_conn(struct bufferevent *bev) {
       RETURN_ERROR("[fd_new_client_conn] fcgi_client malloc failed");
    }
    memset(ret->client, 0, sizeof(fcgi_client_t));
+   fcgi_parser_init(&ret->client->fcgiParser);
 
    ret->client->inMemoryBuf = evbuffer_new();
    if(!ret->client->inMemoryBuf) {
       RETURN_ERROR("[fd_new_client_conn] evbuffer allocation failed");
    }
-
-   ret->client->msg_parser = fcgi_parser_new();
-   ret->client->params_parser = fcgi_params_parser_new(4096);
-   if(!ret->client->msg_parser || !ret->client->params_parser) {
-      RETURN_ERROR("[fd_new_client_conn] FastCGI parsers malloc failed");
-   }
-
-   ret->client->msg_parser->userdata = ret;
-   ret->client->params_parser->userdata = ret;
 
    #ifdef DEBUG_LOG
    static unsigned int ctr = 1;

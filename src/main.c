@@ -17,7 +17,6 @@
 #include "debug.h"
 #include "conn.h"
 #include "fcgi_parser.h"
-#include "fcgi_params_parser.h"
 #include "fcgitypes.h"
 #include "debug_utils.h"
 #include "process_pool.h"
