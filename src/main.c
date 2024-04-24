@@ -25,14 +25,12 @@
 #include "config.h"
 #include "events.h"
 
-static stdfpm_config_t *cfg = NULL;
-
 #define EXIT_WITH_ERROR(...) { log_write(__VA_ARGS__); exit(-1); }
 
 int main(int argc, char **argv) {
    log_set_echo(true);
 
-   cfg = stdfpm_read_config(argc, argv);
+   stdfpm_config_t *cfg = stdfpm_read_config(argc, argv);
    if(!cfg) EXIT_WITH_ERROR("Read config failed: %s", strerror(errno));
    if(!log_open(cfg->error_log)) EXIT_WITH_ERROR("Couldn't open %s: %s", cfg->error_log, strerror(errno));
 
