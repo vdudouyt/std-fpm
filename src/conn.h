@@ -37,4 +37,4 @@ void conn_free(conn_t *this);
 
 conn_t *conn_client_accept(conn_t *listener);
 conn_t *fd_new_client_conn(struct bufferevent *bev);
-conn_t *fd_new_process_conn(fcgi_process_t *proc);
+conn_t *fd_new_process_conn(fcgi_process_t *proc, struct bufferevent *bev);

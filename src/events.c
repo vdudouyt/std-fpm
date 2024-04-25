@@ -5,8 +5,10 @@
 #include "debug_utils.h"
 #include "process_pool.h"
 #include "fcgi_writer.h"
+#include "fdutils.h"
 
 #include <sys/stat.h>
+#include <stdlib.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 #include <event2/listener.h>
@@ -112,14 +114,48 @@ static void stdfpm_start_process(conn_t *conn, const char *scriptFilename) {
    }
 
    struct event_base *base = bufferevent_get_base(conn->bev);
-   fcgi_process_t *proc = pool_borrow_process(base, scriptFilename);
+   fcgi_process_t *proc;
+   int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
+   fd_setnonblocking(newfd);
+   fd_setcloseonexec(newfd);
+
+   while(proc = pool_borrow_process(scriptFilename)) {
+      int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+      if(status == 0 || errno == EINPROGRESS) {
+         break;
+      } else {
+         free(proc);
+         proc = NULL;
+      }
+   }
+
+   if(!proc) {
+      char socketPath[4096];
+      static unsigned int startup_counter = 0;
+      startup_counter++;
+      snprintf(socketPath, sizeof(socketPath), "%s/stdfpm-%d.sock", conn->config->pool, startup_counter);
+      proc = fcgi_spawn(socketPath, scriptFilename);
+      int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+      if(status != 0 && errno != EINPROGRESS) {
+         free(proc);
+         proc = NULL;
+      }
+   }
 
    if(!proc) {
       DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
       return;
    }
 
-   conn_t *newconn = fd_new_process_conn(proc);
+   struct bufferevent *bev = bufferevent_socket_new(base, newfd,
+      BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
+   
+   if(!bev) {
+      log_write("bufferevent allocation failed");
+      return;
+   }
+
+   conn_t *newconn = fd_new_process_conn(proc, bev);
    newconn->pairedWith = conn;
    conn->pairedWith = newconn;
    DEBUG("Started child process: %s", newconn->name);

@@ -66,14 +66,16 @@ conn_t *fd_new_client_conn(struct bufferevent *bev) {
    return ret;
 }
 
-conn_t *fd_new_process_conn(fcgi_process_t *proc) {
-   conn_t *ret = conn_new(proc->bev, STDFPM_FCGI_PROCESS);
+conn_t *fd_new_process_conn(fcgi_process_t *proc, struct bufferevent *bev) {
+   conn_t *ret = conn_new(bev, STDFPM_FCGI_PROCESS);
    if(!ret) {
       RETURN_ERROR("[fd_new_process_conn] failed to create conn");
    }
    ret->process = proc;
 
+   #ifdef DEBUG_LOG
    static unsigned int ctr = 1;
    conn_set_name(ret, "responder_%d", ctr++);
+   #endif
    return ret;
 }

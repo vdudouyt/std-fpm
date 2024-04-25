@@ -22,8 +22,6 @@ pthread_mutex_t pool_mutex;
 pthread_t inactivity_detector;
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
-static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path);
-static fcgi_process_t *pool_create_process(struct event_base *base, const char *path);
 static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
 static void *pool_rip_idling_processes(void *ptr);
@@ -55,86 +53,41 @@ static void remove_all_sockets(const char *path) {
    closedir(dir);
 }
 
-fcgi_process_t *pool_borrow_process(struct event_base *base, const char *path) {
+fcgi_process_t *pool_borrow_process(const char *path) {
+   pthread_mutex_lock(&pool_mutex);
+   fcgi_process_t *proc = NULL;
+
    if(g_hash_table_contains(process_pool, path)) {
-      pthread_mutex_lock(&pool_mutex);
-   } else {
-      char *newkey = strdup(path);
-      if(!newkey) RETURN_ERROR("[process pool] strdup failed");
-      GQueue *q = g_queue_new();
-      if(!q) RETURN_ERROR("[process_pool] queue allocation failed");
-      pthread_mutex_lock(&pool_mutex);
-      g_hash_table_insert(process_pool, newkey, q);
+      GQueue *q = g_hash_table_lookup(process_pool, path);
+      proc = q ? g_queue_pop_head(q) : NULL;
    }
 
-   fcgi_process_t *proc = pool_borrow_existing_process(base, path);
    pthread_mutex_unlock(&pool_mutex);
-
-   if(!proc) proc = pool_create_process(base, path);
    return proc;
 }
 
 void pool_release_process(fcgi_process_t *proc) {
-   DEBUG("[process pool] Releasing process %d to bucket %s", proc->pid, proc->filepath);
+   DEBUG("[process pool] Returning process %d to bucket %s", proc->pid, proc->filepath);
    proc->last_used = time(NULL);
    pthread_mutex_lock(&pool_mutex);
+
    GQueue *q = g_hash_table_lookup(process_pool, proc->filepath);
+   if(!q) {
+      char *newkey = strdup(proc->filepath);
+      if(!newkey) {
+         log_write("[process pool] strdup failed");
+         return;
+      }
+      q = g_queue_new();
+      if(!q) {
+         log_write("[process_pool] queue allocation failed");
+         return;
+      }
+      g_hash_table_insert(process_pool, newkey, q);
+   }
+
    g_queue_push_head(q, proc);
    pthread_mutex_unlock(&pool_mutex);
-}
-
-static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc) {
-   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-   if(fd == -1) return false;
-   if(connect(fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un)) == -1) {
-      close(fd);
-      return false;
-   }
-   fd_setnonblocking(fd);
-   fd_setcloseonexec(fd);
-
-   struct bufferevent *bev = bufferevent_socket_new(base, fd,
-      BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
-
-   if(!bev) {
-      log_write("bufferevent allocation failed");
-      return false;
-   }
-
-   DEBUG("[process pool] opened connection to %s", proc->s_un.sun_path);
-   proc->bev = bev;
-   return true;
-}
-
-static fcgi_process_t *pool_borrow_existing_process(struct event_base *base, const char *path) {
-   GQueue *q = g_hash_table_lookup(process_pool, path);
-   fcgi_process_t *proc;
-
-   while(proc = g_queue_pop_head(q)) {
-      if(pool_connect_process(base, proc)) {
-         return proc;
-      }
-      rmsocket(proc->socket_id);
-      free(proc);
-   }
-
-   return NULL;
-}
-
-static fcgi_process_t *pool_create_process(struct event_base *base, const char *path) {
-   char socket_path[4096];
-   startup_counter++;
-   snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, startup_counter);
-
-   fcgi_process_t *proc = fcgi_spawn(socket_path, path);
-   proc->socket_id = startup_counter;
-   if(!proc) return NULL;
-   if(pool_connect_process(base, proc)) {
-      return proc;
-   } else {
-      free(proc);
-      return NULL;
-   }
 }
 
 void pool_start_inactivity_detector(unsigned int process_idle_timeout) {
