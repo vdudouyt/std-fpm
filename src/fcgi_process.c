@@ -40,6 +40,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    if(bind(listen_sock, (struct sockaddr *) &ret->s_un, sizeof(ret->s_un)) == -1) {
       log_write("[process_pool] failed to bind a unix socket at %s: %s", ret->s_un.sun_path, strerror(errno));
       close(listen_sock);
+      free(ret);
       return NULL;
    }
 
@@ -47,6 +48,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    DEBUG("[fastcgi spawner] Listening...");
    if(listen(listen_sock, 1024) == -1) {
       close(listen_sock);
+      free(ret);
       RETURN_ERROR("[process pool] failed to listen a unix socket");
    }
 
@@ -102,6 +104,7 @@ fcgi_process_t *fcgi_spawn(const char *socketpath, const char *path) {
    } else {
       log_write("[fastcgi spawner] fork failed: %s", strerror(errno));
       close(listen_sock);
+      free(ret);
       return NULL;
    }
 }
