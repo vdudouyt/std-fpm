@@ -20,7 +20,7 @@ static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr);
 static bool stdfpm_allowed_extension(const char *filename, char **extensions);
 static void stdfpm_disconnect(conn_t *conn);
 static void stdfpm_socket_accepted_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *a, int slen, void *p);
-static void stdfpm_start_process(conn_t *conn, const char *scriptFilename);
+static void stdfpm_connect_process(conn_t *conn, const char *scriptFilename);
 
 struct evconnlistener *stdfpm_create_listener(struct event_base *base, const char *sock_path, stdfpm_config_t *config) {
    struct sockaddr_un s_un;
@@ -63,7 +63,7 @@ static void stdfpm_read_completed_cb(struct bufferevent *bev, void *ptr) {
       conn->client->scriptFilename = fcgi_get_script_filename(&conn->client->fcgiParser);
 
       if(conn->client->scriptFilename) {
-         stdfpm_start_process(conn, conn->client->scriptFilename);
+         stdfpm_connect_process(conn, conn->client->scriptFilename);
       }
    }
 
@@ -100,7 +100,7 @@ static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr) {
    }
 }
 
-static void stdfpm_start_process(conn_t *conn, const char *scriptFilename) {
+static void stdfpm_connect_process(conn_t *conn, const char *scriptFilename) {
    DEBUG("[%s] got script filename: %s", conn->name, scriptFilename);
 
    // Apache
