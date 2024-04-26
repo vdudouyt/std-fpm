@@ -135,10 +135,12 @@ static void stdfpm_start_process(conn_t *conn, const char *scriptFilename) {
       startup_counter++;
       snprintf(socketPath, sizeof(socketPath), "%s/stdfpm-%d.sock", conn->config->pool, startup_counter);
       proc = fcgi_spawn(socketPath, scriptFilename);
-      int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
-      if(status != 0 && errno != EINPROGRESS) {
-         free(proc);
-         proc = NULL;
+      if(proc) {
+         int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+         if(status != 0 && errno != EINPROGRESS) {
+            free(proc);
+            proc = NULL;
+         }
       }
    }
 
