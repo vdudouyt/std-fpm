@@ -162,6 +162,7 @@ static void stdfpm_connect_process(conn_t *conn, const char *scriptFilename) {
 
    if(!proc) {
       DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
+      close(newfd);
       return;
    }
 
