@@ -100,6 +100,39 @@ static void stdfpm_event_cb(struct bufferevent *bev, short what, void *ptr) {
    }
 }
 
+static fcgi_process_t *stdfpm_connect_existing_process(const char *scriptFilename, int fd) {
+   fcgi_process_t *proc;
+   while(proc = pool_borrow_process(scriptFilename)) {
+      int status = connect(fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+      if(status == 0 || errno == EINPROGRESS) {
+         return proc;
+      } else {
+         free(proc);
+      }
+   }
+   return NULL;
+}
+
+static fcgi_process_t *stdfpm_connect_new_process(const char *pool, const char *scriptFilename, int fd) {
+   char socketPath[4096];
+   static unsigned int startup_counter = 0;
+   startup_counter++;
+   snprintf(socketPath, sizeof(socketPath), "%s/stdfpm-%d.sock", pool, startup_counter);
+
+   fcgi_process_t *proc = fcgi_spawn(socketPath, scriptFilename);
+   if(!proc) return NULL;
+
+   int status = connect(fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
+   if(status != 0 && errno != EINPROGRESS) {
+      log_write("Couldn't connect to just started process: %s (sock=%s, script_filename = %s)",
+         strerror(errno), socketPath, scriptFilename);
+      free(proc);
+      return NULL;
+   }
+
+   return proc;
+}
+
 static void stdfpm_connect_process(conn_t *conn, const char *scriptFilename) {
    DEBUG("[%s] got script filename: %s", conn->name, scriptFilename);
 
@@ -114,35 +147,18 @@ static void stdfpm_connect_process(conn_t *conn, const char *scriptFilename) {
    }
 
    struct event_base *base = bufferevent_get_base(conn->bev);
-   fcgi_process_t *proc;
+
    int newfd = socket(AF_UNIX, SOCK_STREAM, 0);
+   if(newfd == -1) {
+      log_write("Couldn't create socket: %s", strerror(errno));
+      return;
+   }
+
    fd_setnonblocking(newfd);
    fd_setcloseonexec(newfd);
 
-   while(proc = pool_borrow_process(scriptFilename)) {
-      int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
-      if(status == 0 || errno == EINPROGRESS) {
-         break;
-      } else {
-         free(proc);
-         proc = NULL;
-      }
-   }
-
-   if(!proc) {
-      char socketPath[4096];
-      static unsigned int startup_counter = 0;
-      startup_counter++;
-      snprintf(socketPath, sizeof(socketPath), "%s/stdfpm-%d.sock", conn->config->pool, startup_counter);
-      proc = fcgi_spawn(socketPath, scriptFilename);
-      if(proc) {
-         int status = connect(newfd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));
-         if(status != 0 && errno != EINPROGRESS) {
-            free(proc);
-            proc = NULL;
-         }
-      }
-   }
+   fcgi_process_t *proc = stdfpm_connect_existing_process(scriptFilename, newfd);
+   if(!proc) proc = stdfpm_connect_new_process(conn->config->pool, scriptFilename, newfd);
 
    if(!proc) {
       DEBUG("[%s] couldn't acquire FastCGI process", conn->name);
