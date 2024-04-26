@@ -32,7 +32,6 @@ struct conn_s {
 };
 
 conn_t *conn_new(struct bufferevent *bev, int type);
-void conn_set_name(conn_t *this, const char *fmt, ...);
 void conn_free(conn_t *this);
 
 conn_t *conn_client_accept(conn_t *listener);

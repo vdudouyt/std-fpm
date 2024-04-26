@@ -22,15 +22,15 @@ conn_t *conn_new(struct bufferevent *bev, int type) {
    return ret;
 }
 
-void conn_set_name(conn_t *this, const char *fmt, ...) {
-   #ifdef DEBUG_LOG
+#ifdef DEBUG_LOG
+static void conn_set_name(conn_t *this, const char *fmt, ...) {
    va_list args;
    va_start(args, fmt);
    vsnprintf(this->name, sizeof(this->name), fmt, args);
    va_end(args);
    DEBUG("[%s] new conn created", this->name);
-   #endif
 }
+#endif
 
 void conn_free(conn_t *this) {
    if(this->client) {
