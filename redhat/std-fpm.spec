@@ -27,10 +27,6 @@ sed -i s/www-data/nobody/ conf/std-fpm.conf
 %{_sbindir}/%{name}
 /etc/std-fpm.conf
 /etc/systemd/system/std-fpm.service
-%dir /run/std-fpm/
-%dir /run/std-fpm/pool/
-%attr(0755,nobody,nobody) %dir /run/std-fpm/
-%attr(0755,nobody,nobody) %dir /run/std-fpm/pool/
 
 %changelog
 * Sat Mar 30 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.2-3
