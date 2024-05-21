@@ -31,6 +31,8 @@ struct evconnlistener *stdfpm_create_listener(struct event_base *base, const cha
    struct evconnlistener *ret = evconnlistener_new_bind(base, stdfpm_socket_accepted_cb, config,
        LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC,
        -1, (struct sockaddr*) &s_un, sizeof(s_un));
+   if(!ret) log_write("Failed to create a socket at %s: %s", sock_path, strerror(errno));
+
    chmod(s_un.sun_path, 0777);
    return ret;
 }
