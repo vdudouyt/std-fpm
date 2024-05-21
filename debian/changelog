@@ -1,3 +1,9 @@
+std-fpm (0.3) stable; urgency=medium
+
+  * First stable version
+
+ -- Valentin Dudouyt <valentin.dudouyt@gmail.com>  Sat, 21 May 2024 15:22:00 +0300
+
 std-fpm (0.2-3) unstable; urgency=medium
 
   * Added process_idle_timeout and rd_high_watermark into config
