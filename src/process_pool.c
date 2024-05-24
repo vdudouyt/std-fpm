@@ -22,9 +22,7 @@ pthread_mutex_t pool_mutex;
 pthread_t inactivity_detector;
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
-static void pool_shutdown_inactive_processes(evutil_socket_t fd, short what, void *arg);
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
-static void *pool_rip_idling_processes(void *ptr);
 static void rmsocket(unsigned int socket_id);
 static void remove_all_sockets(const char *path);
 
@@ -90,19 +88,11 @@ void pool_release_process(fcgi_process_t *proc) {
    pthread_mutex_unlock(&pool_mutex);
 }
 
-void pool_start_inactivity_detector(unsigned int process_idle_timeout) {
-   pthread_create(&inactivity_detector, NULL, pool_rip_idling_processes, GINT_TO_POINTER(process_idle_timeout));
-}
-
-static void *pool_rip_idling_processes(void *ptr) {
-   unsigned int process_idle_timeout = GPOINTER_TO_INT(ptr);
-   while(1) {
-      DEBUG("pool_rip_idling_processes()");
-      pthread_mutex_lock(&pool_mutex);
-      g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &process_idle_timeout);
-      pthread_mutex_unlock(&pool_mutex);
-      sleep(process_idle_timeout >= 60 ? 60 : 1);
-   }
+void pool_rip_idling_processes(unsigned int process_idle_timeout) {
+   DEBUG("pool_rip_idling_processes(%d)", process_idle_timeout);
+   pthread_mutex_lock(&pool_mutex);
+   g_hash_table_foreach(process_pool, pool_shutdown_bucket_inactive_processes, &process_idle_timeout);
+   pthread_mutex_unlock(&pool_mutex);
 }
 
 static void rmsocket(unsigned int socket_id) {
@@ -124,7 +114,6 @@ static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value
       }
       DEBUG("[process pool] removing idle process: %s", key);
       kill(proc->pid, SIGTERM);
-      rmsocket(proc->socket_id);
       free(proc);
       g_queue_pop_tail(q);
    }

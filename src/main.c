@@ -37,6 +37,11 @@ void check_dir_exists(const char *dirpath, mode_t mode, uid_t uid, gid_t gid) {
    if(uid) chown(dirpath, uid, gid);
 }
 
+static void rip_idling_processes_cb(evutil_socket_t fd, short what, void *arg) {
+   stdfpm_config_t *cfg = arg;
+   pool_rip_idling_processes(cfg->process_idle_timeout);
+}
+
 int main(int argc, char **argv) {
    log_set_echo(true);
 
@@ -63,6 +68,11 @@ int main(int argc, char **argv) {
 
    struct event_base *base = event_base_new();
    struct evconnlistener *listener = stdfpm_create_listener(base, cfg->listen, cfg);
+
+   struct timeval interval = { cfg->process_idle_timeout > 60 ? 60 : 1, 0 };
+   struct event *ev = event_new(base, -1, EV_PERSIST, rip_idling_processes_cb, cfg);
+   event_add(ev, &interval);
+
    event_base_dispatch(base);
    event_base_free(base);
 }
