@@ -29,7 +29,9 @@
 
 void check_dir_exists(const char *dirpath, mode_t mode, uid_t uid, gid_t gid) {
    if(access(dirpath, F_OK) == -1) {
-      mkdir(dirpath, mode);
+      if(mkdir(dirpath, mode) != 0) {
+         log_write("Failed to create %s: %s", dirpath, strerror(errno));
+      }
    }
    chmod(dirpath, mode);
    if(uid) chown(dirpath, uid, gid);
