@@ -109,6 +109,7 @@ static fcgi_process_t *stdfpm_connect_existing_process(const char *scriptFilenam
       if(status == 0 || errno == EINPROGRESS) {
          return proc;
       } else {
+         rmsocket(proc->socket_id);
          free(proc);
       }
    }
@@ -122,6 +123,7 @@ static fcgi_process_t *stdfpm_connect_new_process(const char *pool, const char *
    snprintf(socketPath, sizeof(socketPath), "%s/stdfpm-%d.sock", pool, startup_counter);
 
    fcgi_process_t *proc = fcgi_spawn(socketPath, scriptFilename);
+   proc->socket_id = startup_counter;
    if(!proc) return NULL;
 
    int status = connect(fd, (struct sockaddr *) &proc->s_un, sizeof(proc->s_un));

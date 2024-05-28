@@ -23,7 +23,6 @@ pthread_t inactivity_detector;
 
 static bool pool_connect_process(struct event_base *base, fcgi_process_t *proc);
 static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value, gpointer user_data);
-static void rmsocket(unsigned int socket_id);
 static void remove_all_sockets(const char *path);
 
 bool pool_init(const char *path) {
@@ -95,7 +94,9 @@ void pool_rip_idling_processes(unsigned int process_idle_timeout) {
    pthread_mutex_unlock(&pool_mutex);
 }
 
-static void rmsocket(unsigned int socket_id) {
+/* Clean unused UNIX sockets (a defensive programming way) */
+
+void rmsocket(unsigned int socket_id) {
    char socket_path[4096];
    snprintf(socket_path, sizeof(socket_path), "%s/stdfpm-%d.sock", pool_path, socket_id);
    DEBUG("Removing %s", socket_path);
@@ -114,6 +115,7 @@ static void pool_shutdown_bucket_inactive_processes(gpointer key, gpointer value
       }
       DEBUG("[process pool] removing idle process: %s", key);
       kill(proc->pid, SIGTERM);
+      rmsocket(proc->socket_id);
       free(proc);
       g_queue_pop_tail(q);
    }
