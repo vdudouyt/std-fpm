@@ -1,5 +1,5 @@
 Name:           std-fpm
-Version:        0.2.3
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        A language-agnostic FastCGI process manager
 
@@ -29,6 +29,11 @@ sed -i s/www-data/nobody/ conf/std-fpm.conf
 /etc/systemd/system/std-fpm.service
 
 %changelog
+* Wed May 29 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.3.1
+- Shutdown idle processes
+- Clean unused UNIX sockets
+- Check run directories at startup
+
 * Sat Mar 30 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.2-3
 - v0.2-3
 
