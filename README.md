@@ -1,22 +1,11 @@
 STD-FPM
 =============
-A high-performance language-agnostic FastCGI process manager
-* Highly efficient asynchronous event-driven architecture
-* Works with almost any programming language ([C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
-* Dynamically controls FastCGI process population depending on incoming traffic
-* Not getting blocked with frequent FastCGI handler ``exit()``s, long ``sleep()``s, slow-running I/Os and whatever else
-* Compatible with the most of HTTP server software available
-* Almost no configuration required (see below)
-
-## Comparison with similar software
-|                            | STD-FPM | PHP-FPM | mod_fcgid | spawn-fcgi |
-| -------------------------- | ------- | ------- | --------- | -----------|
-| Languages                  | Any     | PHP     | Any       | Any        |
-| Web Servers                | Any     | Any     | Apache    | Any        |
-| Dynamic process management | Y       | Y       | Y         | N          |
-| SCRIPT_FILENAME routing    | Y       | Y       | Y         | N          |
-| Unexpected exits tolerance | Y       | ?       | N         | ?          |
-| Long-running I/O tolerance | Y       | ?       | N         | N          |
+A language-independent FastCGI process manager
+* Implemented in safe programming language
+* Multithreaded asynchronous I/O
+* Tolerant to ``sleep()``s/long running IOs and unexpected ``exit()``s due to dynamic process count control
+* Language-independent (with [C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
+* Compatible with NGINX
 
 ## Server configuration examples
 ### Nginx (recommended)
@@ -35,6 +24,10 @@ $ a2enmod proxy_fcgi
 <FilesMatch \.fcgi$>
      SetHandler "proxy:unix:/run/std-fpm/std-fpm.sock|fcgi://localhost/"
 </FilesMatch>
+```
+## Build sources
+```nohighlight
+$ cargo build --release
 ```
 ## Build binary packages
 ```nohighlight
