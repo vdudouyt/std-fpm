@@ -1,8 +1,6 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use tokio::net::{ UnixListener, UnixStream };
-use tokio::process::{ Command, Child };
-use std::process::Stdio;
 use std::ffi::OsStr;
 
 use tokio::io::{ AsyncWriteExt };
@@ -28,8 +26,17 @@ mod fcgi_spawn;
 mod config;
 
 fn main() {
-    let cfg = Config::load();
-    let mut rt = match tokio::runtime::Builder::new_multi_thread().enable_io().enable_time() {
+    let log = log2::stdout().module(false).start();
+    let cfg = match Config::load() {
+        Err(err) => {
+            error!("Failed while loading config: {}", err);
+            return;
+        }
+        Ok(cfg) => cfg,
+    };
+
+    log.set_level(&cfg.log_level);
+    let rt = match tokio::runtime::Builder::new_multi_thread().enable_io().enable_time() {
         rt if cfg.worker_threads > 0 => rt.worker_threads(cfg.worker_threads as usize),
         rt => rt,
     }.build().unwrap();
@@ -53,7 +60,7 @@ async fn async_main(cfg: Config) -> tokio::io::Result<()> {
         tokio::spawn(async move {
             if let Err(err) = process_conn(socket, cfg, pool).await {
                 let msg = err.chain().map(|e| e.to_string()).collect::<Vec<_>>().join(": ");
-                error!("{}", msg);
+                warn!("{}", msg);
             }
         });
     }
