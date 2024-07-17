@@ -23,7 +23,7 @@ impl Config {
        let listen_path = cfg.get("global", "listen").expect("listen path not specified");
        let pool_path = cfg.get("global", "pool").expect("pool path not specified");
        let error_log = cfg.get("global", "error_log").expect("error_log not specified");
-       let fcgi_extensions = cfg.get("global", "fcgi_extensions").expect("fcgi_extensions not specified");
+       let fcgi_extensions = cfg.get("global", "fcgi_extensions").expect("fcgi_extensions not specified").to_lowercase();
        let log_level = cfg.get("global", "log_level").unwrap_or(String::from("info"));
        let process_idle_timeout = cfg.getuint("global", "process_idle_timeout")
         .expect("failed to parse process_idle_timeout")
@@ -40,14 +40,14 @@ impl Config {
 
        return Config {
            listen_path, pool_path, error_log, process_idle_timeout,
-           fcgi_extensions: parse_hashset(&fcgi_extensions),
+           fcgi_extensions: split_extensions(&fcgi_extensions),
            _log: log
        };
    }
 }
 
-fn parse_hashset(s : &str) -> HashSet<String> {
-    HashSet::from_iter(s.split(';').map(|s| s.trim().to_owned()))
+fn split_extensions(s : &str) -> HashSet<String> {
+    HashSet::from_iter(s.split(';').map(|s| s.trim().trim_start_matches('.').to_owned()))
 }
 
 
