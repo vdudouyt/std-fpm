@@ -40,7 +40,12 @@ fn main() {
         rt if cfg.worker_threads > 0 => rt.worker_threads(cfg.worker_threads as usize),
         rt => rt,
     }.build().unwrap();
-    rt.block_on(async move { async_main(cfg).await; });
+
+    rt.block_on(async move {
+        if let Err(err) = async_main(cfg).await {
+            error!("Critical error: {}", err);
+        }
+    });
 }
 
 async fn async_main(cfg: Config) -> tokio::io::Result<()> {
