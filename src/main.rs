@@ -9,6 +9,7 @@ use std::path::Path;
 use std::sync::{ Arc, Mutex };
 use std::io::{Error, ErrorKind};
 use std::time::{ Duration, Instant };
+use std::process::ExitCode;
 use log2::*;
 use anyhow::{Context, Result, anyhow};
 
@@ -26,12 +27,12 @@ mod fcgi_pool;
 mod fcgi_spawn;
 mod config;
 
-fn main() {
+fn main() -> ExitCode {
     let log = log2::stdout().module(false).start();
     let cfg = match Config::load() {
         Err(err) => {
             error!("Failed while loading config: {}", err);
-            return;
+            return ExitCode::from(255);
         }
         Ok(cfg) => cfg,
     };
@@ -47,6 +48,8 @@ fn main() {
             error!("Critical error: {}", err);
         }
     });
+
+    ExitCode::from(255)
 }
 
 async fn async_main(cfg: Config) -> tokio::io::Result<()> {
