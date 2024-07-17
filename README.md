@@ -1,6 +1,6 @@
 STD-FPM
 =============
-A language-independent FastCGI process manager
+A high-performance language-independent FastCGI process manager
 * Written in memory-safe programming language
 * Asynchronous & multithreaded
 * Implements dynamic process management
