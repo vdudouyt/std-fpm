@@ -1,10 +1,14 @@
 [Unit]
 Description=A language-agnostic FastCGI process manager
 After=network.target
-User=root
 
 [Service] 
-ExecStart=/usr/sbin/std-fpm -f -c /etc/std-fpm.conf
+ExecStart=/usr/sbin/std-fpm
+User=www-data
+Group=www-data
+RuntimeDirectory=std-fpm
+StandardOutput=append:/var/log/std-fpm.log
+StandardError=append:/var/log/std-fpm.log
  
 [Install] 
 WantedBy=multi-user.target
