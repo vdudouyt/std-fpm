@@ -4,6 +4,7 @@ use tokio::net::{ UnixListener, UnixStream };
 use std::ffi::OsStr;
 
 use tokio::io::{ AsyncWriteExt };
+use tokio::task::JoinSet;
 use std::path::Path;
 use std::sync::{ Arc, Mutex };
 use std::io::{Error, ErrorKind};
@@ -93,7 +94,7 @@ fn http_error(error_kind: ErrorKind) -> String {
     format!("Status: {}\nContent-type: text/html\n\n{}", status, error_message)
 }
 
-async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<FcgiPool>>) -> anyhow::Result<()> {
+async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<FcgiPool>>) -> Result<()> {
     let (socket_r, socket_w) = tokio::io::split(socket);
     let mut reader = FcgiReader::new(socket_r);
     let mut writer = FcgiWriter::new(socket_w);
@@ -113,22 +114,26 @@ async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<Fc
     let (mut proc, conn) = connect_result.context("spawning fcgi process").context(script_filename.clone())?;
     let (mut conn_r, mut conn_w) = tokio::io::split(conn);
     let mut socket_w = writer.take_socket();
-    let write_process = tokio::spawn(async move {
+
+    let mut set = JoinSet::new();
+
+    set.spawn(async move {
         conn_w.write_all(reader.get_buf()).await?;
         tokio::io::copy(&mut reader.rdstream, &mut conn_w).await?;
         conn_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
-    let write_peer = tokio::spawn(async move {
+    set.spawn(async move {
         tokio::io::copy(&mut conn_r, &mut socket_w).await?;
         socket_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
-    write_process.await.context("writing process")?;
-    write_peer.await.context("writing peer")?;
-    
+    while let Some(Ok(res)) = set.join_next().await {
+        if res.is_err() { break; }
+    }
+
     proc.ts = Instant::now();
     pool.lock().unwrap().add_process(&script_filename, proc);
     return Ok(());

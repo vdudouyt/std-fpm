@@ -64,6 +64,7 @@ impl FcgiReader {
 
         Some((FcgiHeader { version, msg_type, request_id, content_length, padding_length }, expected_len as usize))
     }
+    #[allow(dead_code)]
     pub fn trim_buf(&mut self) {
         self.buf.advance(self.pos);
         self.pos = 0;
