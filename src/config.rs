@@ -4,6 +4,7 @@ use std::path::Path;
 use log2::*;
 
 pub struct Config {
+    pub worker_threads: u64,
     pub listen_path: String,
     pub pool_path: String,
     pub error_log: String,
@@ -20,6 +21,7 @@ impl Config {
        let mut cfg = Ini::new();
        cfg.load(cfg_path).unwrap();
    
+       let worker_threads = cfg.getuint("global", "worker_threads").expect("failed to parse").unwrap_or(0);
        let listen_path = cfg.get("global", "listen").expect("listen path not specified");
        let pool_path = cfg.get("global", "pool").expect("pool path not specified");
        let error_log = cfg.get("global", "error_log").expect("error_log not specified");
@@ -39,7 +41,7 @@ impl Config {
        let _ = std::fs::create_dir_all(&pool_path);
 
        return Config {
-           listen_path, pool_path, error_log, process_idle_timeout,
+           worker_threads, listen_path, pool_path, error_log, process_idle_timeout,
            fcgi_extensions: split_extensions(&fcgi_extensions),
            _log: log
        };

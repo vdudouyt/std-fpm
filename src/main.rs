@@ -27,9 +27,17 @@ mod fcgi_pool;
 mod fcgi_spawn;
 mod config;
 
-#[tokio::main]
-async fn main() -> tokio::io::Result<()> {
-    let cfg = Arc::new(Config::load());
+fn main() {
+    let cfg = Config::load();
+    let mut rt = match tokio::runtime::Builder::new_multi_thread().enable_io().enable_time() {
+        rt if cfg.worker_threads > 0 => rt.worker_threads(cfg.worker_threads as usize),
+        rt => rt,
+    }.build().unwrap();
+    rt.block_on(async move { async_main(cfg).await; });
+}
+
+async fn async_main(cfg: Config) -> tokio::io::Result<()> {
+    let cfg = Arc::new(cfg);
     let _ = fs::remove_file(&cfg.listen_path);
     let listener = UnixListener::bind(&cfg.listen_path)?;
     fs::set_permissions(&cfg.listen_path, fs::Permissions::from_mode(0o666))?;
