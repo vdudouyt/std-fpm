@@ -3,7 +3,7 @@ STD-FPM
 A language-independent FastCGI process manager
 * Implemented in safe programming language
 * Multithreaded asynchronous I/O
-* Tolerant to ``sleep()``s/long running IOs and unexpected ``exit()``s due to dynamic process count control
+* Dynamic process count control with tolerance to **sleeps/long running IOs** and **unexpected exits**
 * Language-independent (with [C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
 * Compatible with NGINX
 
