@@ -9,7 +9,7 @@ A high-performance language-independent FastCGI process manager
 * Fully compatible with NGINX
 
 ## Server configuration examples
-### Nginx (recommended)
+### Nginx
 ```nohighlight
 location ~ \.fcgi$ {
    include fastcgi.conf;
@@ -18,7 +18,7 @@ location ~ \.fcgi$ {
 ```
 ### Apache
 ```nohighlight
-$ a2dismod fcgid # or untie .fcgi handler in Apache configuration
+$ a2dismod fcgid
 $ a2enmod proxy_fcgi
 ```
 ```nohighlight
