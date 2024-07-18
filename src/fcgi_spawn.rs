@@ -17,6 +17,6 @@ pub fn fcgi_spawn(cmd: &str, socket_path: &str) -> std::io::Result<FcgiProcess> 
     proc.stderr(Stdio::null());
     let dirname = Path::new(cmd).parent().unwrap_or(Path::new("/")).to_str().unwrap_or("/");
     proc.current_dir(dirname);
-    let child = proc.spawn()?;
+    let child = proc.spawn().map_err(|x| { let _ = std::fs::remove_file(&socket_path); x })?;
     return Ok(FcgiProcess { child, socket_path: socket_path.to_owned(), ts: Instant::now() });
 }
