@@ -52,8 +52,7 @@ fn main() -> ExitCode {
     ExitCode::from(255)
 }
 
-async fn async_main(cfg: Config) -> tokio::io::Result<()> {
-    let cfg = Arc::new(cfg);
+async fn async_main(cfg: Arc<Config>) -> tokio::io::Result<()> {
     let _ = fs::remove_file(&cfg.listen_path);
     let listener = UnixListener::bind(&cfg.listen_path)?;
     fs::set_permissions(&cfg.listen_path, fs::Permissions::from_mode(0o666))?;
@@ -123,19 +122,15 @@ async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<Fc
     set.spawn(async move {
         conn_w.write_all(reader.get_buf()).await?;
         tokio::io::copy(&mut reader.rdstream, &mut conn_w).await?;
-        conn_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
     set.spawn(async move {
         tokio::io::copy(&mut conn_r, &mut socket_w).await?;
-        socket_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
-    while let Some(Ok(res)) = set.join_next().await {
-        if res.is_err() { break; }
-    }
+    let _ = set.join_next().await;
 
     proc.ts = Instant::now();
     pool.lock().unwrap().add_process(&script_filename, proc);
