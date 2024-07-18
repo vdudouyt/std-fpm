@@ -34,7 +34,7 @@ fn main() -> ExitCode {
             error!("Failed while loading config: {}", err);
             return ExitCode::from(255);
         }
-        Ok(cfg) => cfg,
+        Ok(cfg) => Arc::new(cfg),
     };
 
     log.set_level(&cfg.log_level);
@@ -43,13 +43,15 @@ fn main() -> ExitCode {
         rt => rt,
     }.build().unwrap();
 
-    rt.block_on(async move {
-        if let Err(err) = async_main(cfg).await {
-            error!("Critical error: {}", err);
-        }
-    });
-
-    ExitCode::from(255)
+    loop {
+        let cfg = Arc::clone(&cfg);
+        rt.block_on(async move {
+            if let Err(err) = async_main(cfg).await {
+                error!("Critical error: {}", err);
+            }
+        });
+        std::thread::sleep(Duration::from_secs(1));
+    }
 }
 
 async fn async_main(cfg: Arc<Config>) -> tokio::io::Result<()> {
