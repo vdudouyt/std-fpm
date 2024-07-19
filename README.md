@@ -3,7 +3,7 @@ STD-FPM
 A high-performance language-independent FastCGI process manager
 * Written in memory-safe programming language
 * Asynchronous & multithreaded
-* Implements dynamic process management
+* Dynamic process management
 * Tolerant to sleeps/long running IOs and unexpected exits
 * Language-independent (with [C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
 * Fully compatible with NGINX
