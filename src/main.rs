@@ -25,6 +25,7 @@ mod fcgi_writer;
 mod fcgi_params_parser;
 mod fcgi_pool;
 mod fcgi_spawn;
+mod fdlimit;
 mod config;
 
 fn main() -> ExitCode {
@@ -36,6 +37,11 @@ fn main() -> ExitCode {
         }
         Ok(cfg) => Arc::new(cfg),
     };
+
+    match fdlimit::raise() {
+        Ok(fdlimit::LimitRaised { from, to }) => info!("Raised fdlimit from {} to {}", from, to),
+        Err(err) => warn!("Failed while raising fdlimit: {}", err),
+    }
 
     log.set_level(&cfg.log_level);
     let rt = match tokio::runtime::Builder::new_multi_thread().enable_io().enable_time() {
@@ -50,7 +56,7 @@ fn main() -> ExitCode {
                 error!("Critical error: {}", err);
             }
         });
-        std::thread::sleep(Duration::from_secs(1));
+       std::thread::sleep(Duration::from_secs(1));
     }
 }
 
@@ -123,16 +129,23 @@ async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<Fc
 
     set.spawn(async move {
         conn_w.write_all(reader.get_buf()).await?;
-        tokio::io::copy(&mut reader.rdstream, &mut conn_w).await?;
+        let _ = tokio::io::copy(&mut reader.rdstream, &mut conn_w).await;
+        conn_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
     set.spawn(async move {
-        tokio::io::copy(&mut conn_r, &mut socket_w).await?;
+        let _ = tokio::io::copy(&mut conn_r, &mut socket_w).await;
+        socket_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
-    let _ = set.join_next().await;
+    while let Some(Ok(res)) = set.join_next().await {
+        if let Err(err) = res {
+            warn!("I/O error: {}", err);
+            break;
+        }
+    }
 
     proc.ts = Instant::now();
     pool.lock().unwrap().add_process(&script_filename, proc);
