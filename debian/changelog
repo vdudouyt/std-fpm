@@ -1,3 +1,9 @@
+std-fpm (1.0.0) stable; urgency=medium
+
+  * Rust rewrite
+
+ -- Valentin Dudouyt <valentin.dudouyt@gmail.com>  Sat, 20 Jul 2024 14:04:00 +0300
+
 std-fpm (0.3.1) stable; urgency=medium
 
   * Shutdown idle processes
