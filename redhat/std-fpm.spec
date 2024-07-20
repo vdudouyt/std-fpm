@@ -1,5 +1,5 @@
 Name:           std-fpm
-Version:        0.3.1
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        A language-agnostic FastCGI process manager
 
@@ -7,7 +7,7 @@ License:        0BSD
 URL:            https://github.com/vdudouyt/%{name}
 Source:         %{expand:%%(pwd)}
 
-BuildRequires:  gcc, cmake, libevent-devel, glib2-devel
+BuildRequires:  rust, cargo
 
 %description
 A language-agnostic FastCGI process manager
@@ -15,20 +15,28 @@ A language-agnostic FastCGI process manager
 %prep
 find . -mindepth 1 -delete # Clean out old files
 cp -af %{SOURCEURL0}/. .
-sed -i s/www-data/nobody/ conf/std-fpm.conf
+sed -i s/www-data/nobody/ systemd/system/std-fpm.service
 
 %build
-%cmake
+cargo build --release
 
 %install
-%make_install
+mkdir -p %{buildroot}/usr/sbin
+mkdir -p %{buildroot}/etc
+mkdir -p %{buildroot}/usr/lib/systemd/system/
+cp target/release/std-fpm %{buildroot}/%{_sbindir}
+cp conf/std-fpm.conf %{buildroot}/etc/std-fpm.conf
+cp systemd/system/std-fpm.service %{buildroot}/usr/lib/systemd/system/
 
 %files
 %{_sbindir}/%{name}
 /etc/std-fpm.conf
-/etc/systemd/system/std-fpm.service
+/usr/lib/systemd/system/std-fpm.service
 
 %changelog
+* Wed Jul 20 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 1.0.0
+- Rust rewrite
+
 * Wed May 29 2024 Valentin Dudouyt <valentin.dudouyt@gmail.com> - 0.3.1
 - Shutdown idle processes
 - Clean unused UNIX sockets
