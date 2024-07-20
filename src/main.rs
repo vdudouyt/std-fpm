@@ -142,7 +142,7 @@ async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<Fc
 
     while let Some(Ok(res)) = set.join_next().await {
         if let Err(err) = res {
-            warn!("I/O error: {}", err);
+            debug!("I/O error: {}", err);
             break;
         }
     }
