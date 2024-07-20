@@ -16,22 +16,12 @@ location ~ \.fcgi$ {
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
 }
 ```
-### Apache
-```nohighlight
-$ a2dismod fcgid
-$ a2enmod proxy_fcgi
-```
-```nohighlight
-<FilesMatch \.fcgi$>
-     SetHandler "proxy:unix:/run/std-fpm/std-fpm.sock|fcgi://localhost/"
-</FilesMatch>
-```
 ## Build sources
 ```nohighlight
 $ cargo build --release
 ```
 ## Build binary packages
 ```nohighlight
-$ fakeroot dpkg-buildpackage -nc    # Debian way
+$ fakeroot dpkg-buildpackage        # Debian way
 $ rpmbuild -bb redhat/std-fpm.spec  # RedHat way
 ```
