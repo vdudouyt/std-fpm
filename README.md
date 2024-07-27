@@ -1,5 +1,7 @@
 STD-FPM
 =============
+![build-and-test](https://github.com/vdudouyt/std-fpm/actions/workflows/build.yml/badge.svg)  
+
 A high-performance language-independent FastCGI process manager
 * Written in memory-safe programming language
 * Asynchronous & multithreaded
