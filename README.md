@@ -12,11 +12,25 @@ A high-performance language-independent FastCGI process manager
 
 ## Server configuration examples
 ### Nginx
+**Way 1**: just .fcgi files
 ```nohighlight
 location ~ \.fcgi$ {
    include fastcgi.conf;
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
 }
+```
+**Way 2**: a cgi-bin directory
+```nohighlight
+location /cgi-bin/ {
+   rewrite ^/cgi-bin/(.*)\.f?cgi$ /$1.fcgi break;
+   include fastcgi.conf;
+   fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
+}
+```
+Large file uploads:
+```nohighlight
+client_max_body_size 0;
+fastcgi_request_buffering off;
 ```
 ## Build sources
 ```nohighlight
