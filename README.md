@@ -10,6 +10,14 @@ A high-performance language-independent FastCGI process manager
 * Language-independent (with [C](/examples/c/), [C++](/examples/c++/), [Perl](/examples/perl/) and [LuaJIT](/examples/luajit/) examples available)
 * Fully compatible with NGINX
 
+## Installation
+1. Install one of our binary packages from releases (recommended), or build from sources with ```cargo build --release ```. If needed, change the running user in ```/usr/lib/systemd/system/std-fpm.service```
+2. Start with ```service std-fpm start```. Check for logs in ```/var/log/std-fpm.log```
+3. Pick up one of server configuration examples below to configure your Nginx location
+
+Notice: there are some known logging problems with pre-v240 systemd releases.   
+If you're experiencing any troubles, starting in foreground mode with ```/usr/sbin/std-fpm -f -c /etc/std-fpm.conf``` is advised.
+   
 ## Server configuration examples
 ### Nginx
 **Way 1**: just .fcgi files
@@ -31,10 +39,6 @@ Large file uploads:
 ```nohighlight
 client_max_body_size 0;
 fastcgi_request_buffering off;
-```
-## Build sources
-```nohighlight
-$ cargo build --release
 ```
 ## Build binary packages
 ```nohighlight
