@@ -30,6 +30,7 @@ location ~ \.fcgi$ {
 **Way 2**: a cgi-bin directory
 ```nohighlight
 location /cgi-bin/ {
+   root /var/www/cgi-bin/;
    rewrite ^/cgi-bin/(.*)\.f?cgi$ /$1.fcgi break;
    include fastcgi.conf;
    fastcgi_pass unix:/run/std-fpm/std-fpm.sock;
