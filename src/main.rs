@@ -122,28 +122,37 @@ async fn process_conn(socket : UnixStream, cfg : Arc<Config>, pool: Arc<Mutex<Fc
         let _ = writer.send_response(http_error(err.kind()).as_bytes()).await;
     }
     let (mut proc, conn) = connect_result.context("spawning fcgi process").context(script_filename.clone())?;
-    let (mut conn_r, mut conn_w) = tokio::io::split(conn);
+    let (conn_r, mut conn_w) = tokio::io::split(conn);
     let mut socket_w = writer.take_socket();
 
     let mut set = JoinSet::new();
 
+    // Both relays use copy_buf over a BufReader rather than tokio::io::copy:
+    // copy_buf never holds bytes it hasn't written yet when it issues a read,
+    // so a read error can't discard data already received. With tokio::io::copy,
+    // a backend that exits without draining the request stream (ECONNRESET on
+    // our side) could lose up to one copy buffer of the response tail.
     set.spawn(async move {
         conn_w.write_all(reader.get_buf()).await?;
-        let _ = tokio::io::copy(&mut reader.rdstream, &mut conn_w).await;
+        let _ = tokio::io::copy_buf(&mut reader.rdstream, &mut conn_w).await;
         conn_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
     set.spawn(async move {
-        let _ = tokio::io::copy(&mut conn_r, &mut socket_w).await;
+        let mut conn_r = tokio::io::BufReader::new(conn_r);
+        let _ = tokio::io::copy_buf(&mut conn_r, &mut socket_w).await;
         socket_w.shutdown().await?;
         return Ok::<(), tokio::io::Error>(());
     });
 
-    while let Some(Ok(res)) = set.join_next().await {
-        if let Err(err) = res {
-            debug!("I/O error: {}", err);
-            break;
+    while let Some(join_res) = set.join_next().await {
+        match join_res {
+            Ok(Ok(())) => {}
+            // Don't break here: dropping the JoinSet aborts the other relay,
+            // which would cut the response off mid-transfer.
+            Ok(Err(err)) => debug!("I/O error: {}", err),
+            Err(err) => warn!("Relay task failed: {}", err),
         }
     }
 

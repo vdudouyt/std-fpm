@@ -13,7 +13,9 @@ pub fn fcgi_spawn(cmd: &str, socket_path: &str) -> std::io::Result<FcgiProcess> 
     let mut proc = Command::new(cmd);
     proc.kill_on_drop(true);
     proc.stdin(OwnedFd::from(listener));
-    proc.stdout(Stdio::piped());
+    // Nothing ever reads the child's stdout, so a pipe would freeze the child
+    // mid-request once it has printed 64K (pipe capacity) over its lifetime.
+    proc.stdout(Stdio::null());
     proc.stderr(Stdio::null());
     let dirname = Path::new(cmd).parent().unwrap_or(Path::new("/")).to_str().unwrap_or("/");
     proc.current_dir(dirname);
