@@ -15,3 +15,14 @@ libc = "0.2.155"
 
 [profile.release]
 strip = true
+
+[[bin]]
+name = "std-fpm"
+path = "src/main.rs"
+
+# FastCGI backend used by tests/functional.rs; never installed by packaging
+# (debian/rules and redhat/std-fpm.spec copy target/release/std-fpm only).
+[[bin]]
+name = "stdfpm-test-backend"
+path = "tests/support/test_backend.rs"
+test = false
